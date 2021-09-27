@@ -279,7 +279,7 @@ impl History {
         &self.sync_key
     }
 
-    pub fn set_sync_key(&mut self, key: &str) -> Result<()> {
+    pub fn set_sync_key(&mut self, key: &str, clear_session_history: bool) -> Result<()> {
         // Set the key and make sure that any in progress syncs do not complete
         // on the new key.
         self.sync_key = key.into();
@@ -290,9 +290,15 @@ impl History {
         // Move any synced actions to local so that they will be uploaded under
         // the new key.
         if self.synced_actions.has_actions() {
-            self.local_actions.prepend(&mut self.synced_actions);
-            self.local_actions.save_index(&self.storage);
-            self.synced_actions.save_index(&self.storage);
+            if ! clear_session_history { 
+                self.local_actions.prepend(&mut self.synced_actions);
+                self.local_actions.save_index(&self.storage);
+                self.synced_actions.save_index(&self.storage);
+            }
+            else {
+                self.local_actions = ActionList::empty("local");
+                self.synced_actions = ActionList::empty("synced");
+            }
             self.synced_solves = SolveDatabase::new();
         }
 

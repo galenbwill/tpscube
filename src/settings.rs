@@ -34,6 +34,10 @@ impl Settings {
         history.setting_as_bool("auto_sessions").unwrap_or(true)
     }
 
+    pub fn clear_session_history(history: &History) -> bool {
+        history.setting_as_bool("clear_session_history").unwrap_or(false)
+    }
+
     pub fn auto_session_time(history: &History) -> i64 {
         history.setting_as_i64("auto_session_time").unwrap_or(3600)
     }
@@ -287,6 +291,26 @@ impl Settings {
                         };
                         ui.text_edit_singleline(&mut self.new_sync_key);
 
+                        if ui
+                            .add(
+                                Label::new(format!(
+                                    "{}  Clear session history when setting key",
+                                    if Self::clear_session_history(history) {
+                                        "☑"
+                                    } else {
+                                        "☐"
+                                    }
+                                ))
+                                .text_style(FontSize::Section.into())
+                                .sense(Sense::click()),
+                            )
+                            .clicked()
+                        {
+                            let new_clear_session_history = !Self::clear_session_history(history);
+                            let _ =
+                                history.set_bool_setting("clear_session_history", new_clear_session_history);
+                            }
+
                         // Validate the sync key being entered
                         if let Some(key) = SyncRequest::validate_sync_key(&self.new_sync_key) {
                             if key == history.sync_key() {
@@ -301,7 +325,8 @@ impl Settings {
                                     )
                                     .clicked()
                                 {
-                                    let _ = history.set_sync_key(&key);
+                                    let _ = history.set_sync_key(&key, Self::clear_session_history(history));
+                                    let _ = history.set_bool_setting("clear_session_history", false);
                                 }
                             }
                         } else {
