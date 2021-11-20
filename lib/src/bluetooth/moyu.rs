@@ -131,11 +131,12 @@ impl fmt::Display for Quat {
 struct QGyroState {
     t: u32,
     q: Quat,
+    d: bool,
 }
 
 impl QGyroState {
     pub fn new(t: u32, q: Quat) -> Self {
-        Self { t, q }
+        Self { t, q, d: false }
     }
     pub fn from_bytes(bytes: &[u8]) -> Self {
         let t = BigEndian::read_u32(&bytes[0..4]);
@@ -150,6 +151,7 @@ impl Sub for QGyroState {
         QGyroState {
             t: self.t.wrapping_sub(rhs.t),
             q: self.q - rhs.q,
+            d: true,
         }
     }
 }
@@ -158,8 +160,9 @@ impl fmt::Display for QGyroState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "GyroState {} {:#?}",
+            "GyroState {} {}{:#?}",
             self.q,
+            if self.d { "+" } else { " " },
             Duration::from_micros(self.t as u64 / 10),
         )
     }
