@@ -269,6 +269,23 @@ impl CubeRenderer {
             }
         }
     }
+    
+    pub fn do_orientations(&mut self, orientations: &[Orientation]) {
+        if self.max_queued_orientations == 0 {
+            for mv in orientations {
+                self.target_cube.do_move(*mv);
+            }
+            self.cube = self.target_cube.clone();
+            self.move_queue.clear();
+            self.animation = None;
+            self.update_colors();
+        } else {
+            for mv in orientations {
+                self.target_cube.do_move(*mv);
+                self.move_queue.push(*mv);
+            }
+        }
+    }
 
     pub fn verify_state(&mut self, cube: Cube3x3x3) {
         if self.target_cube != cube {

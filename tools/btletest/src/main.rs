@@ -16,12 +16,12 @@ fn main() {
                     let elapsed = Instant::now() - *real_time_start;
                     for mv in moves {
                         *total_time += mv.time();
-                        println!(
-                            "Move {}@{}  received at {}",
-                            mv.move_().to_string(),
-                            *total_time,
-                            elapsed.as_millis()
-                        );
+                        // println!(
+                        //     "Move {}@{}  received at {}",
+                        //     mv.move_().to_string(),
+                        //     *total_time,
+                        //     elapsed.as_millis()
+                        // );
                     }
                 } else {
                     *real_time_start = Some(Instant::now());
