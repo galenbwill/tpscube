@@ -10,7 +10,9 @@ use egui::{
 };
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
-use tpscube_core::{BluetoothCube, BluetoothCubeState, Cube, Cube3x3x3, TimedMove};
+use tpscube_core::{
+    gyro::QGyroState, BluetoothCube, BluetoothCubeState, Cube, Cube3x3x3, TimedMove,
+};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 enum BluetoothMode {
@@ -28,6 +30,7 @@ pub struct BluetoothState {
     error: Option<String>,
     renderer: CubeRenderer,
     move_queue: Arc<Mutex<Vec<(Vec<TimedMove>, Cube3x3x3)>>>,
+    gyro_queue: Arc<Mutex<Vec<Vec<QGyroState>>>>,
     cube_state: Cube3x3x3,
 }
 
@@ -39,6 +42,7 @@ impl BluetoothState {
             error: None,
             renderer: CubeRenderer::new(),
             move_queue: Arc::new(Mutex::new(Vec::new())),
+            gyro_queue: Arc::new(Mutex::new(Vec::new())),
             cube_state: Cube3x3x3::new(),
         }
     }
@@ -135,6 +139,18 @@ impl BluetoothState {
         result
     }
 
+    pub fn new_gyros(&mut self) -> Vec<QGyroState> {
+        let mut gyro_queue = self.gyro_queue.lock().unwrap();
+        let mut result = Vec::new();
+        for gyros in gyro_queue.deref() {
+            for gyro in gyros {
+                result.push(gyro.clone());
+            }
+        }
+        gyro_queue.clear();
+        result
+    }
+
     pub fn disconnect(&mut self) {
         if let Some(cube) = &self.cube {
             cube.disconnect();
@@ -154,6 +170,14 @@ impl BluetoothState {
                     .lock()
                     .unwrap()
                     .push((moves.to_vec(), state.clone()));
+                repaint_signal.request_repaint();
+            });
+
+            let repaint_signal = frame.repaint_signal();
+            let gyro_queue = self.gyro_queue.clone();
+            cube.register_gyro_listener(move |gyro_state| {
+                // println!("{} pushing {:?}", "BluetoothState.start_connect_flow.gyro_listener", gyro_state);
+                gyro_queue.lock().unwrap().push(gyro_state.to_vec());
                 repaint_signal.request_repaint();
             });
 
@@ -338,6 +362,11 @@ impl BluetoothState {
             }
             self.cube_state = state.clone();
             self.renderer.verify_state(state);
+        }
+
+        for gyro in self.gyro_queue.lock().unwrap().deref_mut().drain(..) {
+            self.renderer.do_gyro(&gyro);
+            // println!("{} queuing gyro: {:?}", "BluetoothCubeState.check_state", gyro);
         }
 
         let cube = self.cube.as_ref().unwrap();

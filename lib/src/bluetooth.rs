@@ -5,6 +5,7 @@ mod moyu;
 
 use crate::common::TimedMove;
 use crate::cube3x3x3::Cube3x3x3;
+use crate::gyro::QGyroState;
 use anyhow::{anyhow, Result};
 use btleplug::api::{BDAddr, Central, Peripheral};
 use gan::gan_cube_connect;
@@ -90,12 +91,19 @@ pub struct BluetoothCube {
     battery: Arc<Mutex<(Option<u32>, Option<bool>)>>,
     listeners:
         Arc<Mutex<HashMap<MoveListenerHandle, Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send>>>>,
+    gyro_listeners:
+        Arc<Mutex<HashMap<GyroListenerHandle, Box<dyn Fn(&[QGyroState]) + Send>>>>,
     next_listener_id: AtomicU64,
     error: Arc<Mutex<Option<String>>>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MoveListenerHandle {
+    id: u64,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GyroListenerHandle {
     id: u64,
 }
 
@@ -108,6 +116,7 @@ impl BluetoothCube {
         let connected_name = Arc::new(Mutex::new(None));
         let battery = Arc::new(Mutex::new((None, None)));
         let listeners = Arc::new(Mutex::new(HashMap::new()));
+        let gyro_listeners = Arc::new(Mutex::new(HashMap::new()));
         let error = Arc::new(Mutex::new(None));
 
         let discovered_devices_copy = discovered_devices.clone();
@@ -117,6 +126,7 @@ impl BluetoothCube {
         let connected_name_copy = connected_name.clone();
         let battery_copy = battery.clone();
         let listeners_copy = listeners.clone();
+        let gyro_listeners_copy = gyro_listeners.clone();
         let error_copy = error.clone();
         std::thread::spawn(move || {
             match Self::discovery_handler(
@@ -127,6 +137,7 @@ impl BluetoothCube {
                 connected_name_copy,
                 battery_copy,
                 listeners_copy,
+                gyro_listeners_copy,
             ) {
                 Err(error) => {
                     *state_copy.lock().unwrap() = BluetoothCubeState::Error;
@@ -144,6 +155,7 @@ impl BluetoothCube {
             connected_name,
             battery,
             listeners,
+            gyro_listeners,
             next_listener_id: AtomicU64::new(0),
             error,
         }
@@ -158,6 +170,9 @@ impl BluetoothCube {
         battery: Arc<Mutex<(Option<u32>, Option<bool>)>>,
         listeners: Arc<
             Mutex<HashMap<MoveListenerHandle, Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send>>>,
+        >,
+        gyro_listeners: Arc<
+            Mutex<HashMap<GyroListenerHandle, Box<dyn Fn(&[QGyroState]) + Send>>>,
         >,
     ) -> Result<()> {
         let manager = Manager::new()?;
@@ -176,6 +191,7 @@ impl BluetoothCube {
                 for device in central.peripherals() {
                     if to_connect == device.address() {
                         let listeners_copy = listeners.clone();
+                        let gyro_listeners_copy = gyro_listeners.clone();
 
                         // Set up time calibration state
                         struct TimeCalibrationState {
@@ -298,6 +314,11 @@ impl BluetoothCube {
                                     listener.1(&adjusted_moves, state);
                                 }
                             }),
+                            Box::new(move |gyro_state| {
+                            // Notify clients of the move information
+                            for listener in gyro_listeners_copy.lock().unwrap().iter() {
+                                listener.1(&gyro_state);
+                            }}),
                         );
                     }
                 }
@@ -335,6 +356,7 @@ impl BluetoothCube {
         peripheral: P,
         init: Box<dyn Fn(&dyn BluetoothCubeDevice) + Send + 'static>,
         move_listener: Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send + 'static>,
+        gyro_listener: Box<dyn Fn(&[QGyroState]) + Send + 'static>,
     ) -> Result<()> {
         // Determine cube type
         let name = peripheral.properties().local_name.clone();
@@ -356,7 +378,7 @@ impl BluetoothCube {
             BluetoothCubeType::GAN => gan_cube_connect(peripheral, move_listener)?,
             BluetoothCubeType::GoCube => gocube_connect(peripheral, move_listener)?,
             BluetoothCubeType::Giiker => giiker_connect(peripheral, move_listener)?,
-            BluetoothCubeType::MoYu => moyu_connect(peripheral, move_listener)?,
+            BluetoothCubeType::MoYu => moyu_connect(peripheral, move_listener, gyro_listener)?,
         };
 
         init(cube.as_ref());
@@ -474,6 +496,24 @@ impl BluetoothCube {
 
     pub fn unregister_move_listener(&self, handle: MoveListenerHandle) {
         self.listeners.lock().unwrap().remove(&handle);
+    }
+
+    pub fn register_gyro_listener<F: Fn(&[QGyroState]) + Send + 'static>(
+        &self,
+        func: F,
+    ) -> GyroListenerHandle {
+        // println!("register_gyro_listener");
+        let id = self.next_listener_id.fetch_add(1, Ordering::SeqCst);
+        let handle = GyroListenerHandle { id };
+        self.gyro_listeners
+            .lock()
+            .unwrap()
+            .insert(handle.clone(), Box::new(func));
+        handle
+    }
+
+    pub fn unregister_gyro_listener(&self, handle: GyroListenerHandle) {
+        self.gyro_listeners.lock().unwrap().remove(&handle);
     }
 }
 

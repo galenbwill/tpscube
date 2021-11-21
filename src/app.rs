@@ -412,17 +412,18 @@ impl App for Application {
             match self.mode {
                 Mode::Timer => {
                     #[cfg(target_arch = "wasm32")]
-                    let (bluetooth_state, bluetooth_moves, bluetooth_name) =
-                        (None, Vec::new(), None);
+                    let (bluetooth_state, bluetooth_moves, bluetooth_name, bluetooth_gyros) =
+                        (None, Vec::new(), None, Vec::new());
                     #[cfg(not(target_arch = "wasm32"))]
-                    let (bluetooth_state, bluetooth_moves, bluetooth_name) =
+                    let (bluetooth_state, bluetooth_moves, bluetooth_name, bluetooth_gyros) =
                         if !self.bluetooth_dialog_open && self.bluetooth.ready() {
                             let moves = self.bluetooth.new_moves();
                             let state = self.bluetooth.cube_state();
                             let name = self.bluetooth.name();
-                            (Some(state), moves, name)
+                            let gyros = self.bluetooth.new_gyros();
+                            (Some(state), moves, name, gyros)
                         } else {
-                            (None, Vec::new(), None)
+                            (None, Vec::new(), None, Vec::new())
                         };
 
                     self.timer_widget.update(
@@ -431,6 +432,7 @@ impl App for Application {
                         self.history.as_mut().unwrap(),
                         bluetooth_state,
                         bluetooth_moves,
+                        bluetooth_gyros,
                         bluetooth_name,
                         framerate,
                         &mut self.timer_cube_rect,

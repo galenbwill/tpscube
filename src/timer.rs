@@ -18,8 +18,8 @@ use session::TimerSession;
 use solve::{bluetooth_timer_ui, timer_ui};
 use state::TimerState;
 use tpscube_core::{
-    Analysis, Cube, Cube3x3x3, CubeWithSolution, History, PartialAnalysis, Penalty, Solve,
-    SolveType, TimedMove,
+    gyro::QGyroState, Analysis, Cube, Cube3x3x3, CubeWithSolution, History, PartialAnalysis,
+    Penalty, Solve, SolveType, TimedMove,
 };
 
 pub struct TimerWidget {
@@ -130,6 +130,7 @@ impl TimerWidget {
         rect: &Rect,
         history: &mut History,
         mut bluetooth_moves: Vec<TimedMove>,
+        _bluetooth_gyros: Vec<QGyroState>,
         bluetooth_name: Option<String>,
         accept_keyboard: bool,
     ) -> Response {
@@ -148,6 +149,27 @@ impl TimerWidget {
         // Check for user input to interact with the timer
         let touching = crate::is_mobile() == Some(true)
             && (interact.is_pointer_button_down_on() || interact.dragged());
+        // let mut do_gyro = false;
+        // if bluetooth_gyros.len() != 0 {
+        //     match self.state.clone() {
+        //         TimerState::BluetoothPreparing(_start, _time, _analysis) => {
+        //             do_gyro = true;
+        //         }
+        //         TimerState::BluetoothReady => {
+        //             do_gyro = true;
+        //         }
+        //         TimerState::BluetoothSolving(_start, _moves, _) => {
+        //             do_gyro = true;
+        //         }
+        //         _ => {
+        //             do_gyro = false;
+        //         }
+        //     }
+        // }
+        // if do_gyro {
+        //     self.cube.renderer.do_gyro(&bluetooth_gyros);
+        //     println!("do_gyro ({}) {:?}", bluetooth_gyros.len(), bluetooth_gyros);
+        // }
         match self.state.clone() {
             TimerState::Inactive(time, analysis) => {
                 if accept_keyboard && (ctxt.input().keys_down.contains(&Key::Space) || touching) {
@@ -278,6 +300,7 @@ impl TimerWidget {
         history: &mut History,
         bluetooth_state: Option<Cube3x3x3>,
         bluetooth_moves: Vec<TimedMove>,
+        bluetooth_gyros: Vec<QGyroState>,
         bluetooth_name: Option<String>,
         framerate: &mut Framerate,
         cube_rect: &mut Option<Rect>,
@@ -286,7 +309,7 @@ impl TimerWidget {
     ) {
         self.cube.check_for_new_scramble();
         self.cube
-            .update_bluetooth_state(&bluetooth_state, &bluetooth_moves);
+            .update_bluetooth_state(&bluetooth_state, &bluetooth_moves, &bluetooth_gyros);
 
         self.check_for_expired_session(history);
 
@@ -331,6 +354,7 @@ impl TimerWidget {
                         &rect,
                         history,
                         bluetooth_moves,
+                        bluetooth_gyros,
                         bluetooth_name,
                         accept_keyboard,
                     );

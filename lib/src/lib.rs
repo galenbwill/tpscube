@@ -5,6 +5,7 @@ mod cube3x3x3;
 mod rand;
 mod request;
 mod tables;
+pub mod gyro;
 
 #[cfg(feature = "storage")]
 mod future;

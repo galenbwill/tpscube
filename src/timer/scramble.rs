@@ -8,7 +8,9 @@ use crate::timer::state::TimerState;
 use crate::widgets::fit_scramble;
 use anyhow::Result;
 use egui::{CtxRef, Pos2, Rect, Response, Sense, Ui, Vec2};
-use tpscube_core::{scramble_3x3x3, Cube, Cube3x3x3, Move, MoveSequence, TimedMove};
+use tpscube_core::{
+    gyro::QGyroState, scramble_3x3x3, Cube, Cube3x3x3, Move, MoveSequence, TimedMove,
+};
 
 const TARGET_SCRAMBLE_FRACTION: f32 = 0.2;
 const TARGET_ANALYSIS_SCRAMBLE_FRACTION: f32 = 0.15;
@@ -25,7 +27,7 @@ pub struct TimerCube {
     current_scramble_displayed: bool,
     displayed_scramble: Vec<Move>,
     next_scramble: Option<Vec<Move>>,
-    renderer: CubeRenderer,
+    pub renderer: CubeRenderer,
     bluetooth_active: bool,
     scramble_move_index: Option<usize>,
     scramble_pending_move: Option<Move>,
@@ -246,11 +248,15 @@ impl TimerCube {
         &mut self,
         bluetooth_state: &Option<Cube3x3x3>,
         bluetooth_moves: &[TimedMove],
+        bluetooth_gyros: &[QGyroState],
     ) {
         if let Some(state) = bluetooth_state {
             if self.bluetooth_active {
                 for mv in bluetooth_moves {
                     self.renderer.do_move(mv.move_());
+                }
+                if bluetooth_gyros.len() != 0 {
+                    self.renderer.do_gyro(bluetooth_gyros.clone());
                 }
             } else {
                 self.bluetooth_started(state);
