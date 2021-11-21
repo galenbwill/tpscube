@@ -272,8 +272,6 @@ impl<P: Peripheral + 'static> MoYuCube<P> {
         let mut face_rotations: [i8; 6] = [0, 0, 0, 0, 0, 0];
 
         let mut last_gyro_time = None;
-        // let mut last_gyro_timeu: u64 = 0;
-        // let mut last_gyro: Option<GyroStates> = None;
         let mut last_qgyro: Option<QGyroState> = None;
 
         device.on_notification(Box::new(move |value| {
@@ -284,13 +282,6 @@ impl<P: Peripheral + 'static> MoYuCube<P> {
                 }
 
                 let qgyro_state = QGyroState::from_bytes(&value.value);
-                // let delta_t: u64 = (qgyro_state.t as u64).wrapping_sub(last_gyro_timeu);
-                // let delta_t = if qgyro_state.t as u64 > last_gyro_timeu {
-                //     qgyro_state.t as u64 - last_gyro_timeu as u64
-                // } else {
-                //     last_gyro_timeu = qgyro_state.t as u64;
-                //     0
-                // };
 
                 if let Some(gyro) = last_qgyro {
                     let delta = qgyro_state - gyro;
@@ -334,148 +325,6 @@ impl<P: Peripheral + 'static> MoYuCube<P> {
                     last_qgyro = Some(qgyro_state);
                 }
 
-                // if (qgyro_state.t as u64 / 1000000 - last_gyro_timeu / 1000000) > 10 {
-                // if (delta_t as f64 / 100000.0) > 3.0 {
-                // if (Duration::from_micros(delta_t as u64 / 10).subsec_millis()) > 2 {
-                //     last_gyro_timeu = qgyro_state.t as u64;
-                //     println!("{:?} {}", Duration::from_micros(delta_t as u64 / 10), qgyro_state);
-                // }
-
-                // if false {
-                //     let n1 = LittleEndian::read_u16(&value.value[0..2]);
-                //     let n2 = LittleEndian::read_u16(&value.value[2..4]);
-                //     let tt: f32 = n1 as f32 + (n2 as f32 / 0x10000 as f32);
-                //     let delta_t = tt - last_gyro_time;
-                //     if delta_t < 0.25 {
-                //         return;
-                //     }
-                //     last_gyro_time = tt;
-                //     let count: usize = 20;
-
-                //     // if let Some(gyro) = &last_gyro {
-                //     //     println!("Last gyro: {:?}", gyro);
-                //     // }
-
-                //     // let mut n: [i8; 4] = [0, 0, 0, 0];
-                //     // let mut number: f32 = 0.0;
-                //     // let mut n1: u16 = 0;
-                //     // let mut n2: i16 = 0;
-                //     let gs = GyroState {
-                //         n: [0, 0, 0, 0],
-                //         number: 0.0,
-                //         n1: 0,
-                //         n2: 0,
-                //     };
-                //     let mut curr_gyro: GyroStates = GyroStates {
-                //         n: [gs, gs, gs, gs],
-                //     };
-                //     for i in 1..5 {
-                //         for j in 0..4 {
-                //             curr_gyro.n[i - 1].n[j] = value.value[(i * 4) + j] as i8;
-                //         }
-                //         curr_gyro.n[i - 1].number =
-                //             LittleEndian::read_f32(&value.value[(i * 4)..(i * 4) + 4]);
-                //         curr_gyro.n[i - 1].n1 =
-                //             LittleEndian::read_i16(&value.value[(i * 4)..(i * 4) + 2]);
-                //         curr_gyro.n[i - 1].n2 =
-                //             LittleEndian::read_i16(&value.value[(i * 4) + 2..(i * 4) + 4]);
-                //     }
-
-                //     // println!("\nGyro:\n{}", curr_gyro);
-
-                //     // if let Some(gyro) = last_gyro {
-                //     //     println!("\nDelta:\n{}", curr_gyro - gyro);
-                //     // }
-
-                //     // last_gyro = Some(curr_gyro);
-
-                //     // let mut count = value.value[0];
-                //     // let mut count = LittleEndian::read_u16(&value.value[0..2]);
-                //     // if value.value.len() < 1 + count as usize * 6 {
-                //     //     *synced_copy2.lock().unwrap() = false;
-                //     //     return;
-                //     // }
-                //     // println!("Count {}", count);
-                //     // if count > 20 {
-                //     //     count = 20;
-                //     // }
-                //     // hexdump::hexdump(&value.value[0..count as usize]);
-                //     let cfg = HexConfig {
-                //         title: false,
-                //         width: count,
-                //         group: 0,
-                //         ..HexConfig::default()
-                //     };
-
-                //     let v = &value.value[0..count as usize];
-
-                //     if false {
-                //         for i in 0..5 {
-                //             let mut n: [i8; 4] = [0, 0, 0, 0];
-                //             for j in 0..4 {
-                //                 n[j] = value.value[(i * 4) + j] as i8;
-                //             }
-                //             // let number = LittleEndian::read_f32(&value.value[(i * 4)..(i * 4) + 4]);
-                //             // let n1 = LittleEndian::read_i16(&value.value[(i * 4)..(i * 4) + 2]);
-                //             // let n2 = LittleEndian::read_i16(&value.value[(i * 4) + 2..(i * 4) + 4]);
-                //             // println!("Axis ({}) {:03} {:03} {:03} {:03} {:08x?}", i, n[0], n[1], n[2], n[3], number);
-                //             // println!("Axis ({}) {:03} {:03} {:03} {:03} {:04x?} {:04x?}", i, n[0], n[1], n[2], n[3], n1, n2);
-                //             if i == 0 {
-                //                 // let t = LittleEndian::read_u32(&value.value[(i * 4)..(i * 4) + 4]);
-                //                 // let n1 = LittleEndian::read_u16(&value.value[(i * 4)..(i * 4) + 2]);
-                //                 // let n2 = LittleEndian::read_u16(&value.value[(i * 4) + 2..(i * 4) + 4]);
-                //                 // let tt: f32 = n1 as f32 + (n2 as f32 / 0x10000 as f32);
-                //                 // let d = Duration::from_nanos(t.into());
-                //                 println!(
-                //                     // "Axis ({}) {:4} {:4} {:4} {:4} {:6} {:6} {:04x?} {:04x?} {:?} {} {:0.5}",
-                //                     // "Axis ({}) {:4} {:4} {:4} {:4} {:6} {:6} {:04x?} {:04x?} {:0.5}",
-                //                     "\nTime: {:0.5}",
-                //                     // i, n[0], n[1], n[2], n[3], n1, n2, n1, n2,
-                //                     tt
-                //                 );
-                //             } else {
-                //                 let number =
-                //                     LittleEndian::read_f32(&value.value[(i * 4)..(i * 4) + 4]);
-                //                 let n1 = LittleEndian::read_u16(&value.value[(i * 4)..(i * 4) + 2]);
-                //                 let n2 =
-                //                     LittleEndian::read_i16(&value.value[(i * 4) + 2..(i * 4) + 4]);
-                //                 println!(
-                //                     "Axis ({}) {:4} {:4} {:4} {:4} {:04x} {:6} {:+0.8}",
-                //                     i, n[0], n[1], n[2], n[3], n1, n2, number
-                //                 );
-                //             }
-                //         }
-                //     }
-                //     // for i in 0..5 {
-                //     //     let number = LittleEndian::read_u32(&value.value[(i*4)..(i*4)+4]);
-                //     //     println!("Number ({}) {}", i, number);
-                //     // }
-
-                //     if let Some(gyro) = last_gyro {
-                //         let delta = curr_gyro - gyro;
-                //         let mut changed = false;
-                //         for i in 0..4 {
-                //             if delta.n[i].n[2].abs() > 127
-                //                 || delta.n[i].n[3] > 0
-                //                 || delta.n[i].n[3] < 0
-                //             {
-                //                 changed = true;
-                //                 break;
-                //             }
-                //         }
-                //         if changed {
-                //             println!("\nTime: {:0.5}", tt);
-                //             println!("\nCurrent:\n{}", curr_gyro);
-                //             println!("\nDelta:\n{}", curr_gyro - gyro);
-                //             assert_eq!(config_hex(&v, cfg), format!("{:?}", v.hex_conf(cfg)));
-
-                //             println!("{:?}", v.hex_conf(cfg));
-                //             last_gyro = Some(curr_gyro);
-                //         }
-                //     } else {
-                //         last_gyro = Some(curr_gyro);
-                //     }
-                // }
                 return;
             } else if value.uuid == turn_uuid {
                 // Get count of turn reports and check lengths
