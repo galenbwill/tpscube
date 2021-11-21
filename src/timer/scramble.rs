@@ -8,9 +8,7 @@ use crate::timer::state::TimerState;
 use crate::widgets::fit_scramble;
 use anyhow::Result;
 use egui::{CtxRef, Pos2, Rect, Response, Sense, Ui, Vec2};
-use tpscube_core::{
-    gyro::QGyroState, scramble_3x3x3, Cube, Cube3x3x3, Move, MoveSequence, TimedMove,
-};
+use tpscube_core::{scramble_3x3x3, Cube, Cube3x3x3, Move, MoveSequence, QGyroState, TimedMove};
 
 const TARGET_SCRAMBLE_FRACTION: f32 = 0.2;
 const TARGET_ANALYSIS_SCRAMBLE_FRACTION: f32 = 0.15;

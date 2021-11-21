@@ -288,6 +288,13 @@ impl App for Application {
                             self.mode = Mode::Settings;
                         }
 
+                        if ui
+                            .header_label("⚙", "Calibrate", landscape, self.mode == Mode::Settings)
+                            .clicked()
+                        {
+                            self.bluetooth.reset_gyro_calibration();
+                        }
+
                         // Check status of sync and create tooltip text for sync button
                         let sync_status = self.history.as_mut().unwrap().check_sync_status();
                         let local_count = self.history.as_ref().unwrap().local_action_count();

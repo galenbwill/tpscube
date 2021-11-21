@@ -11,7 +11,7 @@ use egui::{
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 use tpscube_core::{
-    gyro::QGyroState, BluetoothCube, BluetoothCubeState, Cube, Cube3x3x3, TimedMove,
+    function, BluetoothCube, BluetoothCubeState, Cube, Cube3x3x3, QGyroState, TimedMove,
 };
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -31,6 +31,7 @@ pub struct BluetoothState {
     renderer: CubeRenderer,
     move_queue: Arc<Mutex<Vec<(Vec<TimedMove>, Cube3x3x3)>>>,
     gyro_queue: Arc<Mutex<Vec<Vec<QGyroState>>>>,
+    gyro_calibration: bool,
     cube_state: Cube3x3x3,
 }
 
@@ -43,8 +44,18 @@ impl BluetoothState {
             renderer: CubeRenderer::new(),
             move_queue: Arc::new(Mutex::new(Vec::new())),
             gyro_queue: Arc::new(Mutex::new(Vec::new())),
+            gyro_calibration: false,
             cube_state: Cube3x3x3::new(),
         }
+    }
+
+    pub fn reset_gyro_calibration(&mut self) {
+        // let gyro_queue = self.gyro_queue.lock().unwrap();
+        // if gyro_queue.len() > 0 && gyro_queue[0].len() > 0 {
+        //     self.gyro_calibration = Some(gyro_queue[0][0].q.quat_invert());
+        // }
+        println!("{}", function!());
+        self.gyro_calibration = true;
     }
 
     pub fn active(&self) -> bool {
@@ -508,6 +519,11 @@ impl BluetoothState {
         gl: &mut GlContext<'_, '_>,
         rect: &Rect,
     ) -> Result<()> {
+        if self.gyro_calibration {
+            self.gyro_calibration = false;
+            self.renderer.reset_gyro_calibration();
+            println!("{}: reset_gyro_calibration", function!());
+        }
         self.renderer.draw(ctxt, gl, rect)
     }
 }

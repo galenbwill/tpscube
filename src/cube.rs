@@ -5,14 +5,13 @@ use crate::gl::{GlContext, GlRenderer, Vertex};
 use anyhow::Result;
 use egui::{CtxRef, Rect};
 use gl_matrix::{
-    common::{to_radian, Mat4},
-    mat4, vec3,
+    common::{to_radian, Mat4, Quat},
+    mat4, quat, vec3,
 };
 use instant::Instant;
 use num_traits::FloatConst;
 use std::time::Duration;
-use tpscube_core::gyro::QGyroState;
-use tpscube_core::{Cube, Cube3x3x3, Face, Move};
+use tpscube_core::{function, Cube, Cube3x3x3, Face, Move, QGyroState};
 
 const FACE_COLORS: [[f32; 3]; 6] = [
     [1.0, 1.0, 1.0],
@@ -40,6 +39,8 @@ pub struct CubeRenderer {
     target_cube: Cube3x3x3,
     move_queue: Vec<Move>,
     gyro_queue: Vec<QGyroState>,
+    last_gyro: Option<Quat>,
+    gyro_calibration: Option<Quat>,
     max_queued_moves: usize,
     pitch: f32,
     yaw: f32,
@@ -80,6 +81,8 @@ impl CubeRenderer {
             target_cube: Cube3x3x3::new(),
             move_queue: Vec::new(),
             gyro_queue: Vec::new(),
+            last_gyro: None,
+            gyro_calibration: None,
             max_queued_moves: 8,
             pitch: 30.0,
             yaw: -35.0,
@@ -270,6 +273,23 @@ impl CubeRenderer {
                 self.target_cube.do_move(*mv);
                 self.move_queue.push(*mv);
             }
+        }
+    }
+
+    pub fn reset_gyro_calibration(&mut self) {
+        if let Some(last_gyro) = self.last_gyro {
+            let calibration = last_gyro.clone();
+            let mut calibration_ref = calibration.clone();
+            quat::conjugate(&mut calibration_ref, &calibration);
+            let calibration2 = calibration_ref.clone();
+            quat::invert(&mut calibration_ref, &calibration2);
+            println!(
+                "{}:\n\tlast_gyro: {:?}\n\tnew calib: {:?}",
+                function!(),
+                last_gyro,
+                calibration_ref,
+            );
+            self.gyro_calibration = Some(calibration_ref.clone());
         }
     }
 
@@ -575,19 +595,6 @@ impl CubeRenderer {
 
             self.update_colors();
         }
-        // else if self.animation.is_none() && self.gyro_queue.len() != 0 {
-        //     let start = Instant::now();
-
-        //     self.animation = Some(Animation {
-        //         start,
-        //         length: Duration::from_secs_f32(1.0 / 10.0),
-        //         face,
-        //         angle,
-        //         move_: mv,
-        //     });
-
-        //     self.update_colors();
-        // }
 
         // Draw cube
         let renderer = self.renderer.as_mut().unwrap();
@@ -598,28 +605,23 @@ impl CubeRenderer {
         let model_ref = &mut model;
         let gyro_popped = self.gyro_queue.pop();
         if let Some(gyro) = gyro_popped {
+            if let Some(gyro_calibration) = self.gyro_calibration {
+                // let mrc = model_ref.clone();
+                mat4::from_quat(model_ref, &gyro_calibration);
+                // println!("{} apply gyro_calibration {:?}", function!(), model_ref);
+            }
+            self.last_gyro = Some(gyro.q.quat_normalize().as_array());
             mat4::from_quat(model_ref, &gyro.q.as_array());
+            if let Some(_gyro_calibration) = self.gyro_calibration {
+                // println!("apply again gyro_calibration {:?}", model_ref);
+                // mat4::from_quat(model_ref, &_gyro_calibration);
+            }
             // mat4::rotate_x(model_ref, &mat4::clone(model_ref), to_radian(0.0));
             mat4::rotate_y(model_ref, &mat4::clone(model_ref), to_radian(-90.0));
             // mat4::rotate_z(model_ref, &mat4::clone(model_ref), to_radian(0.0));
             if self.gyro_queue.len() == 0 {
                 self.gyro_queue.push(gyro);
             }
-
-        // if self.gyro_queue.len() > 0 {
-        //     let gyro_0 = self.gyro_queue[0];
-        //     // if let Some(gyro) = self.gyro_queue.last() {
-        //     //     mat4::from_quat(model_ref, &gyro.q.as_array());
-        //     //     // print!("applying quat {} from {:?}", self.gyro_queue.len(), gyro);
-        //     // }
-        //     mat4::from_quat(model_ref, &gyro_0.q.as_array());
-        //     if self.gyro_queue.len() == 1 {
-        //         self.gyro_queue.clear();
-        //         self.gyro_queue.push(gyro_0);
-        //     }
-        //     else {
-        //         self.gyro_queue.pop();
-        //     }
         } else {
             mat4::from_x_rotation(model_ref, to_radian(self.pitch));
             mat4::rotate_y(model_ref, &mat4::clone(model_ref), to_radian(self.yaw));
@@ -630,13 +632,7 @@ impl CubeRenderer {
             &[MODEL_SCALE, MODEL_SCALE, MODEL_SCALE],
         );
         mat4::translate(model_ref, &mat4::clone(model_ref), &MODEL_OFFSET);
-        // if self.gyro_queue.len() > 0 {
-        //     if let Some (gyro) = self.gyro_queue.last() {
-        //         mat4::from_quat(model_ref, &gyro.q.as_array());
-        //         print!("applying quat {} from {:?}", self.gyro_queue.len(), gyro);
-        //     }
-        //     self.gyro_queue.clear();
-        // }
+
         renderer.set_model_matrix(model);
 
         let mut anim_done = None;
@@ -673,29 +669,20 @@ impl CubeRenderer {
             // Compute model matrix of the moving part of the cube
             let mut model = [0.0; 16];
             let model_ref = &mut model;
-            // if self.gyro_queue.len() > 0 {
-            //     let gyro_0 = self.gyro_queue[0];
-            //     // if let Some(gyro) = self.gyro_queue.last() {
-            //     //     mat4::from_quat(model_ref, &gyro.q.as_array());
-            //     //     // print!("applying quat {} from {:?}", self.gyro_queue.len(), gyro);
-            //     // }
-            //     mat4::from_quat(model_ref, &gyro_0.q.as_array());
-            //     if self.gyro_queue.len() == 1 {
-            //         self.gyro_queue.clear();
-            //         self.gyro_queue.push(gyro_0);
-            //     }
-            //     else {
-            //         self.gyro_queue.pop();
-            //     }
+
             if let Some(gyro) = gyro_popped {
+                if let Some(gyro_calibration) = self.gyro_calibration {
+                    mat4::from_quat(model_ref, &gyro_calibration);
+                }
                 mat4::from_quat(model_ref, &gyro.q.as_array());
+                // if let Some(gyro_calibration) = self.gyro_calibration {
+                //     mat4::from_quat(model_ref, &gyro_calibration);
+                // }
                 mat4::rotate_y(model_ref, &mat4::clone(model_ref), to_radian(-90.0));
             } else {
                 mat4::from_x_rotation(model_ref, to_radian(self.pitch));
                 mat4::rotate_y(model_ref, &mat4::clone(model_ref), to_radian(self.yaw));
             }
-            // mat4::from_x_rotation(model_ref, to_radian(self.pitch));
-            // mat4::rotate_y(model_ref, &mat4::clone(model_ref), to_radian(self.yaw));
             mat4::rotate(model_ref, &mat4::clone(model_ref), to_radian(angle), &axis);
             mat4::scale(
                 model_ref,

@@ -2,10 +2,11 @@ mod action;
 mod analysis;
 mod common;
 mod cube3x3x3;
+mod debug_info;
+mod gyro;
 mod rand;
 mod request;
 mod tables;
-pub mod gyro;
 
 #[cfg(feature = "storage")]
 mod future;
@@ -42,6 +43,7 @@ pub use cube3x3x3::{
     Corner3x3x3, CornerPiece3x3x3, Cube3x3x3, Cube3x3x3Faces, Edge3x3x3, EdgePiece3x3x3,
     FaceRotation3x3x3,
 };
+pub use gyro::{QGyroState, Quat};
 pub use request::{SyncRequest, SyncResponse, SYNC_API_VERSION};
 
 #[cfg(feature = "storage")]
@@ -227,3 +229,16 @@ mod tests {
         }
     }
 }
+
+// #[macro_export]
+// // #[macro_use]
+// macro_rules! function {
+//     () => {{
+//         fn f() {}
+//         fn type_name_of<T>(_: T) -> &'static str {
+//             std::any::type_name::<T>()
+//         }
+//         let name = type_name_of(f);
+//         &name[..name.len() - 3]
+//     }}
+// }

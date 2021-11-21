@@ -18,7 +18,7 @@ use session::TimerSession;
 use solve::{bluetooth_timer_ui, timer_ui};
 use state::TimerState;
 use tpscube_core::{
-    gyro::QGyroState, Analysis, Cube, Cube3x3x3, CubeWithSolution, History, PartialAnalysis,
+    QGyroState, Analysis, Cube, Cube3x3x3, CubeWithSolution, History, PartialAnalysis,
     Penalty, Solve, SolveType, TimedMove,
 };
 

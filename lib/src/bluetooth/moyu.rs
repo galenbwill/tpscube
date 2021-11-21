@@ -297,7 +297,7 @@ impl<P: Peripheral + 'static> MoYuCube<P> {
                     let mut changed = false;
                     let n = delta.q.as_array();
                     for i in 0..4 {
-                        if n[i].abs() > 0.01 {
+                        if n[i].abs() > 0.0009 {
                             changed = true;
                             break;
                         }
