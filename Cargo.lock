@@ -2932,6 +2932,7 @@ name = "tpscube"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "backtrace",
  "chrono",
  "egui",
  "egui_glium",

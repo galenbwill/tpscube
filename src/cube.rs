@@ -3,6 +3,7 @@ use crate::corner_generated::{CORNER_INDEX, CORNER_SOURCE_VERTS};
 use crate::edge_generated::{EDGE_INDEX, EDGE_SOURCE_VERTS};
 use crate::gl::{GlContext, GlRenderer, Vertex};
 use anyhow::Result;
+use backtrace::Backtrace;
 use egui::{CtxRef, Rect};
 use gl_matrix::{
     common::{to_radian, Mat4, Quat},
@@ -40,6 +41,8 @@ pub struct CubeRenderer {
     move_queue: Vec<Move>,
     gyro_queue: Vec<QGyroState>,
     last_gyro: Option<Quat>,
+    last_gyro_time: Option<Instant>,
+    calls_since_last_gyro_log: u64,
     gyro_calibration: Option<Quat>,
     max_queued_moves: usize,
     pitch: f32,
@@ -82,6 +85,8 @@ impl CubeRenderer {
             move_queue: Vec::new(),
             gyro_queue: Vec::new(),
             last_gyro: None,
+            last_gyro_time: None,
+            calls_since_last_gyro_log: 0,
             gyro_calibration: None,
             max_queued_moves: 8,
             pitch: 30.0,
@@ -290,12 +295,72 @@ impl CubeRenderer {
                 calibration_ref,
             );
             self.gyro_calibration = Some(calibration_ref.clone());
+            self.reset_angle();
+            self.update_colors();
         }
     }
 
     pub fn do_gyro(&mut self, gyros: &[QGyroState]) {
-        for mv in gyros {
-            self.gyro_queue.insert(0, *mv);
+        // for mv in gyros {
+        //     self.gyro_queue.insert(0, *mv);
+        // }
+
+        if self.max_queued_moves == 0 {
+            for mv in gyros {
+                self.gyro_queue.insert(0, *mv);
+            }
+        } else {
+            // let mut _gyros: Vec<QGyroState> = Vec::new();
+            // if gyros.len() > self.max_queued_moves {
+            //     self.gyro_queue.clear();
+            //     if let Some(sliced) = gyros.get(..self.max_queued_moves) {
+            //         for mv in sliced {
+            //             _gyros.push(*mv);
+            //         }
+            //     }
+            // } else if self.gyro_queue.len() + gyros.len() > self.max_queued_moves {
+            //     let n = self.max_queued_moves - gyros.len();
+            //     self.gyro_queue.truncate(n);
+            //     for mv in gyros {
+            //         _gyros.push(*mv);
+            //     }
+            // }
+            // for mv in _gyros {
+            //     self.gyro_queue.insert(0, mv);
+            // }
+            for mv in gyros {
+                self.gyro_queue.insert(0, *mv);
+            }
+
+            if false {
+                let this_time = Instant::now();
+                let last_time: Instant = {
+                    let mut _then = this_time.clone();
+                    if let Some(last_gyro_time) = self.last_gyro_time {
+                        _then = last_gyro_time;
+                    }
+                    _then
+                };
+                self.last_gyro_time = Some(this_time);
+                if gyros.len() > 1 || (this_time - last_time) > Duration::from_millis(250) {
+                    println!(
+                        "{} calls: gyros: N:{} Q:{} calls: {:-3} (self.max_queued_moves: {}) {:?}",
+                        function!(),
+                        gyros.len(),
+                        self.gyro_queue.len(),
+                        self.calls_since_last_gyro_log,
+                        self.max_queued_moves,
+                        last_time.elapsed(),
+                    );
+                    self.calls_since_last_gyro_log = 0;
+                } else {
+                    self.calls_since_last_gyro_log += 1;
+                }
+                if gyros.len() > 2 {
+                    let bt = Backtrace::new();
+                    println!("{:?}", bt);
+                }
+            }
         }
         self.update_colors();
     }
@@ -571,7 +636,7 @@ impl CubeRenderer {
             self.renderer = Some(renderer);
         }
 
-        // Start animation if there are new moves and there isn't alreay an animation
+        // Start animation if there are new moves and there isn't already an animation
         if self.animation.is_none() && self.move_queue.len() != 0 {
             while self.move_queue.len() > self.max_queued_moves {
                 let mv = self.move_queue.remove(0);
@@ -610,11 +675,12 @@ impl CubeRenderer {
                 mat4::from_quat(model_ref, &gyro_calibration);
                 // println!("{} apply gyro_calibration {:?}", function!(), model_ref);
             }
-            self.last_gyro = Some(gyro.q.quat_normalize().as_array());
+            // self.last_gyro = Some(gyro.q.quat_normalize().as_array());
+            self.last_gyro = Some(gyro.q.as_array());
             mat4::from_quat(model_ref, &gyro.q.as_array());
             if let Some(_gyro_calibration) = self.gyro_calibration {
                 // println!("apply again gyro_calibration {:?}", model_ref);
-                // mat4::from_quat(model_ref, &_gyro_calibration);
+                mat4::from_quat(model_ref, &_gyro_calibration);
             }
             // mat4::rotate_x(model_ref, &mat4::clone(model_ref), to_radian(0.0));
             mat4::rotate_y(model_ref, &mat4::clone(model_ref), to_radian(-90.0));

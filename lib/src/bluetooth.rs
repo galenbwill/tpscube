@@ -91,8 +91,7 @@ pub struct BluetoothCube {
     battery: Arc<Mutex<(Option<u32>, Option<bool>)>>,
     listeners:
         Arc<Mutex<HashMap<MoveListenerHandle, Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send>>>>,
-    gyro_listeners:
-        Arc<Mutex<HashMap<GyroListenerHandle, Box<dyn Fn(&[QGyroState]) + Send>>>>,
+    gyro_listeners: Arc<Mutex<HashMap<GyroListenerHandle, Box<dyn Fn(&[QGyroState]) + Send>>>>,
     next_listener_id: AtomicU64,
     error: Arc<Mutex<Option<String>>>,
 }
@@ -171,9 +170,7 @@ impl BluetoothCube {
         listeners: Arc<
             Mutex<HashMap<MoveListenerHandle, Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send>>>,
         >,
-        gyro_listeners: Arc<
-            Mutex<HashMap<GyroListenerHandle, Box<dyn Fn(&[QGyroState]) + Send>>>,
-        >,
+        gyro_listeners: Arc<Mutex<HashMap<GyroListenerHandle, Box<dyn Fn(&[QGyroState]) + Send>>>>,
     ) -> Result<()> {
         let manager = Manager::new()?;
         let adapter = manager.adapters()?;
@@ -315,10 +312,11 @@ impl BluetoothCube {
                                 }
                             }),
                             Box::new(move |gyro_state| {
-                            // Notify clients of the move information
-                            for listener in gyro_listeners_copy.lock().unwrap().iter() {
-                                listener.1(&gyro_state);
-                            }}),
+                                // Notify clients of the move information
+                                for listener in gyro_listeners_copy.lock().unwrap().iter() {
+                                    listener.1(&gyro_state);
+                                }
+                            }),
                         );
                     }
                 }

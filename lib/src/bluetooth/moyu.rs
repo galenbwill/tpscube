@@ -26,221 +26,6 @@ struct MoYuCube<P: Peripheral + 'static> {
     synced: Arc<Mutex<bool>>,
 }
 
-// #[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
-// struct Quat {
-//     w: f32,
-//     x: f32,
-//     y: f32,
-//     z: f32,
-// }
-
-// impl Quat {
-//     pub fn new(w: f32, x: f32, y: f32, z: f32) -> Self {
-//         // Self { w: w, x: x, z: -z, y: y }
-//         Self { w, x, y, z }
-//     }
-//     pub fn from_array(q: &[f32; 4]) -> Self {
-//         Self {
-//             w: q[0],
-//             x: q[1],
-//             y: q[2],
-//             z: q[3],
-//         }
-//     }
-//     pub fn as_array(&self) -> [f32; 4] {
-//         [self.w, self.x, self.y, self.z]
-//     }
-//     fn from_bytes(bytes: &[u8]) -> Quat {
-//         let mut r: [f32; 4] = [0.0, 0.0, 0.0, 0.0];
-//         for i in 0..4 {
-//             r[i] = LittleEndian::read_f32(&bytes[i * 4..i * 4 + 4]);
-//         }
-//         Quat::new(r[0], r[1], -r[3], r[2])
-//     }
-
-//     fn quat_invert(&self) -> Quat {
-//         let (w, x, y, z) = (self.w, self.x, self.y, self.z);
-//         let f = 1.0 / (w * w + x * x + y * y + z * z);
-//         return Quat::new(w * f, -x * f, -y * f, -z * f);
-//     }
-
-//     fn quat_normalize(&self) -> Quat {
-//         let (w, x, y, z) = (self.w, self.x, self.y, self.z);
-//         let f = (1.0 / (w * w + x * x + y * y + z * z)).sqrt();
-//         return Quat::new(w * f, x * f, y * f, z * f);
-//     }
-
-//     fn quat_matrix(&self) -> [Quat; 4] {
-//         let (w, x, y, z) = (self.w, self.x, self.y, self.z);
-//         return [
-//             Quat::new(
-//                 w * w + x * x - y * y - z * z,
-//                 2.0 * x * y - 2.0 * w * z,
-//                 2.0 * x * z + 2.0 * w * y,
-//                 0.0,
-//             ),
-//             Quat::new(
-//                 2.0 * x * y + 2.0 * w * z,
-//                 w * w - x * x + y * y - z * z,
-//                 2.0 * y * z - 2.0 * w * x,
-//                 0.0,
-//             ),
-//             Quat::new(
-//                 2.0 * x * z - 2.0 * w * y,
-//                 2.0 * y * z + 2.0 * w * x,
-//                 w * w - x * x - y * y + z * z,
-//                 0.0,
-//             ),
-//             Quat::new(0.0, 0.0, 0.0, 1.0),
-//         ];
-//     }
-// }
-
-// impl Sub for Quat {
-//     type Output = Quat;
-//     fn sub(self, rhs: Quat) -> Quat {
-//         Quat {
-//             w: self.w - rhs.w,
-//             x: self.x - rhs.x,
-//             y: self.y - rhs.y,
-//             z: self.z - rhs.z,
-//         }
-//     }
-// }
-
-// impl Mul for Quat {
-//     type Output = Quat;
-//     fn mul(self, rhs: Quat) -> Quat {
-//         let (a, b, c, d) = (self.w, self.x, self.y, self.z);
-//         let (w, x, y, z) = (rhs.w, rhs.x, rhs.y, rhs.z);
-//         Quat {
-//             w: a * w - b * x - c * y - d * z,
-//             x: a * x + b * w + c * d - d * y,
-//             y: a * y - b * z + c * w + d * x,
-//             z: a * z + b * y - c * x + d * w,
-//         }
-//     }
-// }
-
-// impl fmt::Display for Quat {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         const F: f32 = 100000.0;
-//         let (w, x, y, z) = (self.w * F, self.x * F, self.y * F, self.z * F);
-//         write!(
-//             f,
-//             "[w:{:+10.2}  x:{:+10.2}  y:{:+10.2}  z:{:+10.2}]",
-//             w, x, y, z,
-//             // self.w * f, self.x * f, self.y * f, self.z * f,
-//         )
-//     }
-// }
-
-// #[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
-// struct QGyroState {
-//     t: u32,
-//     q: Quat,
-//     d: bool,
-// }
-
-// impl QGyroState {
-//     pub fn new(t: u32, q: Quat) -> Self {
-//         Self { t, q, d: false }
-//     }
-//     pub fn from_bytes(bytes: &[u8]) -> Self {
-//         let t = BigEndian::read_u32(&bytes[0..4]);
-//         let q = Quat::from_bytes(&bytes[4..20]);
-//         Self::new(t, q)
-//     }
-// }
-
-// impl Sub for QGyroState {
-//     type Output = QGyroState;
-//     fn sub(self, rhs: QGyroState) -> QGyroState {
-//         QGyroState {
-//             t: self.t.wrapping_sub(rhs.t),
-//             q: self.q - rhs.q,
-//             d: true,
-//         }
-//     }
-// }
-
-// impl fmt::Display for QGyroState {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         write!(
-//             f,
-//             "GyroState {} {}{:#?}",
-//             self.q,
-//             if self.d { "+" } else { " " },
-//             Duration::from_micros(self.t as u64 / 10),
-//         )
-//     }
-// }
-
-#[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
-struct GyroState {
-    n: [i8; 4],
-    number: f32,
-    n1: i16,
-    n2: i16,
-}
-
-#[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
-struct GyroStates {
-    n: [GyroState; 4],
-}
-
-impl Sub for GyroState {
-    type Output = GyroState;
-    fn sub(self, rhs: GyroState) -> GyroState {
-        GyroState {
-            n: [
-                self.n[0].wrapping_sub(rhs.n[0]),
-                self.n[1].wrapping_sub(rhs.n[1]),
-                self.n[2].wrapping_sub(rhs.n[2]),
-                self.n[3].wrapping_sub(rhs.n[3]),
-            ],
-            // number: self.number.wrapping_sub(rhs.number),
-            number: self.number - rhs.number,
-            n1: self.n1.wrapping_sub(rhs.n1),
-            n2: self.n2.wrapping_sub(rhs.n2),
-        }
-    }
-}
-
-impl Sub for GyroStates {
-    type Output = GyroStates;
-    fn sub(self, rhs: GyroStates) -> GyroStates {
-        GyroStates {
-            n: [
-                self.n[0].sub(rhs.n[0]),
-                self.n[1].sub(rhs.n[1]),
-                self.n[2].sub(rhs.n[2]),
-                self.n[3].sub(rhs.n[3]),
-            ],
-        }
-    }
-}
-
-impl fmt::Display for GyroStates {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{:}\n{:}\n{:}\n{:}",
-            self.n[0], self.n[1], self.n[2], self.n[3],
-        )
-    }
-}
-
-impl fmt::Display for GyroState {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "GyroState {:4} {:4} {:4} {:4} {:04x} {:6} {:+0.8}",
-            self.n[0], self.n[1], self.n[2], self.n[3], self.n1, self.n2, self.number
-        )
-    }
-}
-
 impl<P: Peripheral + 'static> MoYuCube<P> {
     const FACES: [Face; 6] = [
         Face::Bottom,
@@ -288,7 +73,7 @@ impl<P: Peripheral + 'static> MoYuCube<P> {
                     let mut changed = false;
                     let n = delta.q.as_array();
                     for i in 0..4 {
-                        if n[i].abs() > 0.0009 {
+                        if n[i].abs() > 0.01 {
                             changed = true;
                             break;
                         }
@@ -315,10 +100,9 @@ impl<P: Peripheral + 'static> MoYuCube<P> {
                         };
                         let time_passed = timestamp - prev_gyro_time;
                         let time_passed_ms = (time_passed * 1000.0) as u32;
-                        last_gyro_time = Some(prev_gyro_time + time_passed_ms as f64 / 1000.0);
+                        let _last_gyro_time = prev_gyro_time + time_passed_ms as f64 / 1000.0;
+                        last_gyro_time = Some(_last_gyro_time);
 
-                        // Report the new move
-                        // state_copy.lock().unwrap().do_move(mv);
                         gyro_listener(&[qgyro_state]);
                     }
                 } else {
