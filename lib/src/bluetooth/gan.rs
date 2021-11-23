@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use crate::bluetooth::BluetoothCubeDevice;
 use crate::common::{Color, Cube, Face, Move, TimedMove};
 use crate::cube3x3x3::{
@@ -18,6 +19,7 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use uuid::Uuid;
+use futures_util::stream::StreamExt;
 
 struct GANCubeVersion1Characteristics {
     version: Characteristic,
@@ -54,23 +56,31 @@ struct GANCubeVersion2<P: Peripheral + 'static> {
     cipher: GANCubeVersion2Cipher,
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 struct GANCubeVersion2Cipher {
     device_key: [u8; 16],
     device_iv: [u8; 16],
 }
 
-impl<P: Peripheral> GANCubeVersion1<P> {
+impl<P: Peripheral + 'static> GANCubeVersion1<P> {
     const LAST_MOVE_COUNT_OFFSET: usize = 12;
     const LAST_MOVE_LIST_OFFSET: usize = 13;
 
-    pub fn new(
+    pub async fn new(
         device: P,
         characteristics: GANCubeVersion1Characteristics,
         move_listener: Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send + 'static>,
     ) -> Result<Self> {
         // Detect cube version
-        let version = device.read(&characteristics.version)?;
+        // let mut version: Vec<u8> = 
+        // match device.read(&characteristics.version) {
+        //     Err(e) => return Err(e),
+        //     Ok(v) => v,
+        // };
+        // let version = device.read(&characteristics.version).iter()[0];
+        // use std::pin::Pin;
+
+        let version = device.read(&characteristics.version).await.unwrap();
         if version.len() < 3 {
             return Err(anyhow!("Device version invalid"));
         }
@@ -85,7 +95,7 @@ impl<P: Peripheral> GANCubeVersion1<P> {
         }
 
         // Read device identifier, this is used to derive the key
-        let device_id = device.read(&characteristics.hardware)?;
+        let device_id = device.read(&characteristics.hardware).await.unwrap();
         if device_id.len() < 6 {
             return Err(anyhow!("Device identifier invalid"));
         }
@@ -108,7 +118,7 @@ impl<P: Peripheral> GANCubeVersion1<P> {
         let cipher = GANCubeVersion1Cipher { device_key: key };
 
         // Get initial cube state
-        let state = device.read(&characteristics.cube_state)?;
+        let state = device.read(&characteristics.cube_state).await.unwrap();
         if state.len() < 18 {
             return Err(anyhow!("Cube state is invalid"));
         }
@@ -117,7 +127,7 @@ impl<P: Peripheral> GANCubeVersion1<P> {
         let state = Mutex::new(state);
 
         // Get the initial move count
-        let moves = device.read(&characteristics.last_moves)?;
+        let moves = device.read(&characteristics.last_moves).await.unwrap();
         if moves.len() < 19 {
             return Err(anyhow!("Invalid last move data"));
         }
@@ -125,7 +135,7 @@ impl<P: Peripheral> GANCubeVersion1<P> {
         let last_move_count = Mutex::new(moves[Self::LAST_MOVE_COUNT_OFFSET]);
 
         // Get battery state
-        let battery = device.read(&characteristics.battery)?;
+        let battery = device.read(&characteristics.battery).await.unwrap();
         if battery.len() < 8 {
             return Err(anyhow!("Battery state is invalid"));
         }
@@ -197,20 +207,20 @@ impl<P: Peripheral> GANCubeVersion1<P> {
         Ok(Cube3x3x3Faces::from_colors(state).as_pieces())
     }
 
-    fn move_poll(&self) -> Result<()> {
+    async fn move_poll(&self) -> Result<()> {
         if !*self.synced.lock().unwrap() {
             // Not synced, do not try to poll moves
             return Err(anyhow!("Not synced"));
         }
 
         // Read move data and move timing data
-        let move_data = self.device.read(&self.characteristics.last_moves)?;
+        let move_data = self.device.read(&self.characteristics.last_moves).await.unwrap();
         if move_data.len() < 19 {
             return Err(anyhow!("Invalid last move data"));
         }
         let move_data = self.cipher.decrypt(&move_data)?;
 
-        let timing = self.device.read(&self.characteristics.timing)?;
+        let timing = self.device.read(&self.characteristics.timing).await.unwrap();
         if timing.len() < 19 {
             return Err(anyhow!("Invalid timing data"));
         }
@@ -371,7 +381,7 @@ impl GANCubeVersion1Cipher {
     }
 }
 
-impl<P: Peripheral> GANCubeVersion2<P> {
+impl<P: Peripheral + 'static> GANCubeVersion2<P> {
     const CUBE_MOVES_MESSAGE: u8 = 2;
     const CUBE_STATE_MESSAGE: u8 = 4;
     const BATTERY_STATE_MESSAGE: u8 = 9;
@@ -379,7 +389,7 @@ impl<P: Peripheral> GANCubeVersion2<P> {
 
     const CUBE_STATE_TIMEOUT_MS: usize = 2000;
 
-    pub fn new(
+    pub async fn new(
         device: P,
         read: Characteristic,
         write: Characteristic,
@@ -387,7 +397,7 @@ impl<P: Peripheral> GANCubeVersion2<P> {
     ) -> Result<Self> {
         // Derive keys. These are based on a 6 byte device identifier found in the
         // manufacturer data.
-        let device_key: [u8; 6] = if let Some(data) = device.properties().manufacturer_data.get(&1)
+        let device_key: [u8; 6] = if let Some(data) = device.properties().await.unwrap().unwrap().manufacturer_data.get(&1)
         {
             if data.len() >= 9 {
                 let mut result = [0; 6];
@@ -433,7 +443,10 @@ impl<P: Peripheral> GANCubeVersion2<P> {
         let battery_charging_copy = battery_charging.clone();
         let synced_copy = synced.clone();
 
-        device.on_notification(Box::new(move |value| {
+        let notifications = device.notifications();
+
+        notifications.await.unwrap().for_each( |value| async move {
+            let cipher_copy = RefCell::new(cipher_copy).into_inner();
             if let Ok(value) = cipher_copy.decrypt(&value.value) {
                 let message_type = Self::extract_bits(&value, 0, 4) as u8;
                 match message_type {
@@ -591,8 +604,8 @@ impl<P: Peripheral> GANCubeVersion2<P> {
                     _ => (),
                 }
             }
-        }));
-        device.subscribe(&read)?;
+        });
+        device.subscribe(&read).await;
 
         // Request initial cube state
         let mut loop_count = 0;
@@ -600,7 +613,7 @@ impl<P: Peripheral> GANCubeVersion2<P> {
             let mut message: [u8; 20] = [0; 20];
             message[0] = Self::CUBE_STATE_MESSAGE;
             let message = cipher.encrypt(&message)?;
-            device.write(&write, &message, WriteType::WithResponse)?;
+            device.write(&write, &message, WriteType::WithResponse);
 
             std::thread::sleep(Duration::from_millis(200));
 
@@ -618,7 +631,7 @@ impl<P: Peripheral> GANCubeVersion2<P> {
         let mut message: [u8; 20] = [0; 20];
         message[0] = Self::BATTERY_STATE_MESSAGE;
         let message = cipher.encrypt(&message)?;
-        device.write(&write, &message, WriteType::WithResponse)?;
+        device.write(&write, &message, WriteType::WithResponse).await;
 
         Ok(Self {
             device,
@@ -764,11 +777,12 @@ impl<P: Peripheral> BluetoothCubeDevice for GANCubeVersion2<P> {
     }
 }
 
-pub(crate) fn gan_cube_connect<P: Peripheral + 'static>(
+pub(crate) async fn gan_cube_connect<P: Peripheral + 'static>(
     device: P,
     move_listener: Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send + 'static>,
 ) -> Result<Box<dyn BluetoothCubeDevice>> {
-    let characteristics = device.discover_characteristics()?;
+    let characteristics = device.characteristics();
+    device.discover_services().await;
 
     // Find characteristics for communicating with the cube. There are two different
     // versions of the GAN cubes with different characteristics.

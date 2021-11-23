@@ -22,6 +22,8 @@ csv = "1.1"
 hexdump = "0.1.1"
 pretty-hex = "0.2.1"
 byteorder = "1"
+futures = "0.3"
+futures-util = "0.3.18"
 
 [target.'cfg(target_arch="wasm32")'.dependencies]
 js-sys = { version="0.3", optional=true }
@@ -33,7 +35,8 @@ wasm-bindgen-futures = "0.4"
 rocksdb = { version="0.16", optional=true }
 reqwest = { version="0.11", features=["rustls-tls", "blocking", "json"], optional=true }
 http = { version="0.2", optional=true }
-btleplug = { git="https://github.com/D0ntPanic/btleplug", optional=true }
+# btleplug = { git="https://github.com/deviceplug/btleplug", optional=true }
+btleplug = { version="0.9", optional=true }
 aes = { version="0.7", optional=true }
 tokio = { version="1.7", features=["full"] }
 
