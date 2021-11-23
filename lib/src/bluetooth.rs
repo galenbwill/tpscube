@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 #[cfg(target_os = "linux")]
 use btleplug::bluez::{adapter::Adapter, manager::Manager};
 #[cfg(target_os = "macos")]
-use btleplug::corebluetooth::manager::Manager;
+use btleplug::platform::Manager;
 #[cfg(target_os = "windows")]
 use btleplug::winrtble::{adapter::Adapter, manager::Manager};
 

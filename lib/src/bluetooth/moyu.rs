@@ -11,9 +11,9 @@ use uuid::Uuid;
 extern crate hexdump;
 // use byteorder::{ByteOrder, LittleEndian};
 // use pretty_hex::*;
-use std::fmt;
+// use std::fmt;
 // use std::ops::{Mul, Sub};
-use std::ops::Sub;
+// use std::ops::Sub;
 // use std::time::Duration;
 
 use crate::gyro::QGyroState;
