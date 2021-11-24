@@ -426,7 +426,7 @@ impl Solver {
                     // Search for phase 2 solution using iterative deepening. Do not go beyond the maximum
                     // number of moves for the whole solve.
                     let mut depth = 0;
-                    while depth < self.max_moves - self.moves.len() {
+                    while self.max_moves >= self.moves.len() && depth < self.max_moves - self.moves.len() {
                         if self.search_phase_2(cube, depth) {
                             break;
                         }
