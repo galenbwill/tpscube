@@ -194,6 +194,13 @@ impl GlRenderer {
 
         let mut view = [0.0; 16];
         mat4::from_translation(&mut view, &[-pos[0], -pos[1], -pos[2]]);
+        // mat4::target_to(
+        //     &mut view,
+        //     &[-pos[0], -pos[1], -pos[2]],
+        //     &[pos[0], pos[1], pos[2]],
+        //     // &[0.0, 0.0, 0.0],
+        //     &[0.0, 1.0, 0.0],
+        // );
         self.view = view;
     }
 
