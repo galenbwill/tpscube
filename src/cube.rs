@@ -304,6 +304,17 @@ impl CubeRenderer {
         // for mv in gyros {
         //     self.gyro_queue.insert(0, *mv);
         // }
+        if true {
+            // if self.gyro_queue.len() > 1 {
+            //     self.gyro_queue.truncate(1);
+            // }
+            self.gyro_queue.clear();
+            for mv in gyros {
+                self.gyro_queue.insert(0, *mv);
+                return;
+            }
+            return;
+        }
 
         if self.max_queued_moves == 0 {
             for mv in gyros {
@@ -342,23 +353,25 @@ impl CubeRenderer {
                     _then
                 };
                 self.last_gyro_time = Some(this_time);
-                if gyros.len() > 1 || (this_time - last_time) > Duration::from_millis(250) {
-                    println!(
-                        "{} calls: gyros: N:{} Q:{} calls: {:-3} (self.max_queued_moves: {}) {:?}",
-                        function!(),
-                        gyros.len(),
-                        self.gyro_queue.len(),
-                        self.calls_since_last_gyro_log,
-                        self.max_queued_moves,
-                        last_time.elapsed(),
-                    );
-                    self.calls_since_last_gyro_log = 0;
-                } else {
-                    self.calls_since_last_gyro_log += 1;
-                }
-                if gyros.len() > 2 {
-                    let bt = Backtrace::new();
-                    println!("{:?}", bt);
+                if false {
+                    if gyros.len() > 1 || (this_time - last_time) > Duration::from_millis(250) {
+                        println!(
+                            "{} calls: gyros: N:{} Q:{} calls: {:-3} (self.max_queued_moves: {}) {:?}",
+                            function!(),
+                            gyros.len(),
+                            self.gyro_queue.len(),
+                            self.calls_since_last_gyro_log,
+                            self.max_queued_moves,
+                            last_time.elapsed(),
+                        );
+                        self.calls_since_last_gyro_log = 0;
+                    } else {
+                        self.calls_since_last_gyro_log += 1;
+                    }
+                    if gyros.len() > 2 {
+                        let bt = Backtrace::new();
+                        println!("{:?}", bt);
+                    }
                 }
             }
         }
