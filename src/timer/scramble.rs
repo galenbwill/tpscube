@@ -250,11 +250,11 @@ impl TimerCube {
     ) {
         if let Some(state) = bluetooth_state {
             if self.bluetooth_active {
-                for mv in bluetooth_moves {
-                    self.renderer.do_move(mv.move_());
-                }
                 if bluetooth_gyros.len() != 0 {
                     self.renderer.do_gyro(bluetooth_gyros.clone());
+                }
+                for mv in bluetooth_moves {
+                    self.renderer.do_move(mv.move_());
                 }
             } else {
                 self.bluetooth_started(state);
@@ -269,8 +269,12 @@ impl TimerCube {
     pub fn update_bluetooth_scramble_and_check_finish(
         &mut self,
         bluetooth_moves: &[TimedMove],
+        bluetooth_gyros: &[QGyroState],
     ) -> bool {
         if self.bluetooth_active {
+            if bluetooth_gyros.len() != 0 {
+                self.renderer.do_gyro(bluetooth_gyros.clone());
+            }
             self.apply_bluetooth_moves_for_scramble(bluetooth_moves);
             if let Some(move_index) = self.scramble_move_index {
                 if move_index >= self.displayed_scramble.len() && self.scramble_fix_moves.len() == 0

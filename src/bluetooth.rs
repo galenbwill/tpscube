@@ -14,6 +14,10 @@ use tpscube_core::{
     function, BluetoothCube, BluetoothCubeState, Cube, Cube3x3x3, QGyroState, TimedMove,
 };
 
+
+const CONNECT_SCALE: f32 = 1.25;
+const CONNECT_SIZE: [f32; 2] = [ 250.0 * CONNECT_SCALE, 300.0 * CONNECT_SCALE];
+
 #[derive(Copy, Clone, PartialEq, Eq)]
 enum BluetoothMode {
     DiscoverDevices,
@@ -55,7 +59,8 @@ impl BluetoothState {
         //     self.gyro_calibration = Some(gyro_queue[0][0].q.quat_invert());
         // }
         println!("{}", function!());
-        self.gyro_calibration = true;
+        // self.gyro_calibration = true;
+        self.renderer.reset_gyro_calibration();
     }
 
     pub fn active(&self) -> bool {
@@ -347,10 +352,32 @@ impl BluetoothState {
                     self.mode = BluetoothMode::ResetState;
                     self.renderer.set_cube_state(Cube3x3x3::new());
                 }
+
+                ui.add_space(20.0);
+
+                ui.visuals_mut().widgets.hovered.fg_stroke = Stroke {
+                    width: 1.0,
+                    color: Theme::Yellow.into(),
+                };
+                ui.visuals_mut().widgets.active.fg_stroke = Stroke {
+                    width: 1.0,
+                    color: Theme::Yellow.into(),
+                };
+                if ui
+                    .add(
+                        Label::new("⚖  Recal")
+                            .text_style(FontSize::Section.into())
+                            .sense(Sense::click()),
+                    )
+                    .clicked()
+                {
+                    self.renderer.reset_gyro_calibration();
+                    // self.renderer.reset_angle();
+                }
             });
 
             let (rect, response) =
-                ui.allocate_exact_size(Vec2::new(250.0, 250.0), Sense::click_and_drag());
+                ui.allocate_exact_size(Vec2::new(CONNECT_SIZE[0], CONNECT_SIZE[0]), Sense::click_and_drag());
             *cube_rect = Some(rect.clone());
             framerate.request_max();
 
@@ -431,7 +458,7 @@ impl BluetoothState {
             });
 
             let (rect, response) =
-                ui.allocate_exact_size(Vec2::new(250.0, 250.0), Sense::click_and_drag());
+                ui.allocate_exact_size(Vec2::new(CONNECT_SIZE[0], CONNECT_SIZE[0]), Sense::click_and_drag());
             *cube_rect = Some(rect.clone());
             framerate.request_max();
 
@@ -472,12 +499,12 @@ impl BluetoothState {
     ) {
         ctxt.set_visuals(dialog_visuals());
         Window::new("Connect")
-            .fixed_size(Vec2::new(250.0, 300.0))
+            .fixed_size(Vec2::from(CONNECT_SIZE))
             .collapsible(false)
             .open(open)
             .show(ctxt, |ui| {
-                ui.set_min_size(Vec2::new(250.0, 300.0));
-                ui.set_max_size(Vec2::new(250.0, 300.0));
+                ui.set_min_size(Vec2::from(CONNECT_SIZE));
+                ui.set_max_size(Vec2::from(CONNECT_SIZE));
                 match self.mode {
                     BluetoothMode::DiscoverDevices => self.discover_devices(ui),
                     BluetoothMode::WaitForConnection => match self.waiting_for_connection(ui) {

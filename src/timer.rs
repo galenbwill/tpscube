@@ -18,14 +18,14 @@ use session::TimerSession;
 use solve::{bluetooth_timer_ui, timer_ui};
 use state::TimerState;
 use tpscube_core::{
-    QGyroState, Analysis, Cube, Cube3x3x3, CubeWithSolution, History, PartialAnalysis,
-    Penalty, Solve, SolveType, TimedMove,
+    Analysis, Cube, Cube3x3x3, CubeWithSolution, History, PartialAnalysis, Penalty, QGyroState,
+    Solve, SolveType, TimedMove,
 };
 
 pub struct TimerWidget {
     state: TimerState,
     session: TimerSession,
-    cube: TimerCube,
+    pub cube: TimerCube,
 }
 
 impl TimerWidget {
@@ -130,7 +130,7 @@ impl TimerWidget {
         rect: &Rect,
         history: &mut History,
         mut bluetooth_moves: Vec<TimedMove>,
-        _bluetooth_gyros: Vec<QGyroState>,
+        bluetooth_gyros: Vec<QGyroState>,
         bluetooth_name: Option<String>,
         accept_keyboard: bool,
     ) -> Response {
@@ -170,6 +170,11 @@ impl TimerWidget {
         //     self.cube.renderer.do_gyro(&bluetooth_gyros);
         //     println!("do_gyro ({}) {:?}", bluetooth_gyros.len(), bluetooth_gyros);
         // }
+        if bluetooth_gyros.len() != 0 {
+            // self.cube.do_gyro(&bluetooth_gyros);
+            self.cube.renderer.do_gyro(&bluetooth_gyros);
+            ctxt.request_repaint();
+        }
         match self.state.clone() {
             TimerState::Inactive(time, analysis) => {
                 if accept_keyboard && (ctxt.input().keys_down.contains(&Key::Space) || touching) {
@@ -177,7 +182,7 @@ impl TimerWidget {
                 } else {
                     if self
                         .cube
-                        .update_bluetooth_scramble_and_check_finish(&bluetooth_moves)
+                        .update_bluetooth_scramble_and_check_finish(&bluetooth_moves, &bluetooth_gyros)
                     {
                         self.state = TimerState::BluetoothPreparing(Instant::now(), time, analysis);
                     }
@@ -200,7 +205,7 @@ impl TimerWidget {
                         // start before the user is ready.
                         if !self
                             .cube
-                            .update_bluetooth_scramble_and_check_finish(&bluetooth_moves)
+                            .update_bluetooth_scramble_and_check_finish(&bluetooth_moves, &bluetooth_gyros)
                         {
                             self.state = TimerState::Inactive(time, analysis);
                         }
@@ -246,28 +251,35 @@ impl TimerWidget {
                 } else if ctxt.input().keys_down.len() != 0 || touching {
                     self.finish_solve((Instant::now() - start).as_millis() as u32, history);
                     ctxt.request_repaint();
-                } else if bluetooth_moves.len() != 0 {
-                    let mut moves = moves.clone();
-                    moves.extend(bluetooth_moves);
-                    if self.cube.is_solved() {
-                        self.finish_bluetooth_solve(history, moves, bluetooth_name);
-                        ctxt.request_repaint();
-                    } else {
-                        let mut cube = Cube3x3x3::new();
-                        cube.do_moves(self.cube.scramble());
-                        let initial_state = cube.clone();
-                        let mut final_moves = Vec::new();
-                        let mut time = 0;
-                        for mv in &moves {
-                            cube.do_move(mv.move_());
-                            time += mv.time();
-                            final_moves.push(TimedMove::new(mv.move_(), time));
+                } else {
+                    // if bluetooth_gyros.len() != 0 {
+                    //     // self.cube.do_gyro(&bluetooth_gyros);
+                    //     self.cube.renderer.do_gyro(&bluetooth_gyros);
+                    //     ctxt.request_repaint();
+                    // }
+                    if bluetooth_moves.len() != 0 {
+                        let mut moves = moves.clone();
+                        moves.extend(bluetooth_moves);
+                        if self.cube.is_solved() {
+                            self.finish_bluetooth_solve(history, moves, bluetooth_name);
+                            ctxt.request_repaint();
+                        } else {
+                            let mut cube = Cube3x3x3::new();
+                            cube.do_moves(self.cube.scramble());
+                            let initial_state = cube.clone();
+                            let mut final_moves = Vec::new();
+                            let mut time = 0;
+                            for mv in &moves {
+                                cube.do_move(mv.move_());
+                                time += mv.time();
+                                final_moves.push(TimedMove::new(mv.move_(), time));
+                            }
+                            let analysis = PartialAnalysis::analyze(&CubeWithSolution {
+                                initial_state,
+                                solution: final_moves.clone(),
+                            });
+                            self.state = TimerState::BluetoothSolving(start, moves, analysis);
                         }
-                        let analysis = PartialAnalysis::analyze(&CubeWithSolution {
-                            initial_state,
-                            solution: final_moves.clone(),
-                        });
-                        self.state = TimerState::BluetoothSolving(start, moves, analysis);
                     }
                 }
             }

@@ -288,11 +288,19 @@ impl App for Application {
                             self.mode = Mode::Settings;
                         }
 
+                        ui.visuals_mut().widgets.hovered.fg_stroke = Stroke {
+                            width: 1.0,
+                            color: Theme::Yellow.into(),
+                        };
+                        ui.visuals_mut().widgets.active.fg_stroke = Stroke {
+                            width: 1.0,
+                            color: Theme::Yellow.into(),
+                        };
                         if ui
-                            .header_label("⚙", "Calibrate", landscape, self.mode == Mode::Settings)
+                            .header_label("⚖", "Calibrate", landscape, false)
                             .clicked()
                         {
-                            self.bluetooth.reset_gyro_calibration();
+                            self.timer_widget.cube.renderer.reset_gyro_calibration();
                         }
 
                         // Check status of sync and create tooltip text for sync button
