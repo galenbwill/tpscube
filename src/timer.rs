@@ -41,6 +41,10 @@ impl TimerWidget {
         self.state.is_solving()
     }
 
+    pub fn reset_gyro_calibration(&mut self) {
+        self.cube.reset_gyro_calibration();
+    }
+
     fn finish_solve(&mut self, time: u32, history: &mut History) {
         history.new_solve(Solve {
             id: Solve::new_id(),
@@ -172,7 +176,7 @@ impl TimerWidget {
         // }
         if bluetooth_gyros.len() != 0 {
             // self.cube.do_gyro(&bluetooth_gyros);
-            self.cube.renderer.do_gyro(&bluetooth_gyros);
+            self.cube.do_gyro(&bluetooth_gyros);
             ctxt.request_repaint();
         }
         match self.state.clone() {

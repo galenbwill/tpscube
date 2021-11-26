@@ -7,7 +7,7 @@ use egui::{
     containers::ScrollArea, popup_below_widget, Align2, CentralPanel, CtxRef, CursorIcon, Pos2,
     Rect, SelectableLabel, Sense, Stroke, Ui, Vec2,
 };
-use tpscube_core::{Average, BestSolve, History, ListAverage, Penalty, Solve, SolveList};
+use tpscube_core::{Average, BestSolve, History, ListAverage, Penalty, Solve, SolveList, QGyroState};
 
 const REGION_PADDING: f32 = 16.0;
 const SESSION_REGION_BORDER: f32 = 8.0;

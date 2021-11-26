@@ -25,7 +25,7 @@ pub struct TimerCube {
     current_scramble_displayed: bool,
     displayed_scramble: Vec<Move>,
     next_scramble: Option<Vec<Move>>,
-    pub renderer: CubeRenderer,
+    renderer: CubeRenderer,
     bluetooth_active: bool,
     scramble_move_index: Option<usize>,
     scramble_pending_move: Option<Move>,
@@ -66,6 +66,18 @@ impl TimerCube {
 
     pub fn is_bluetooth_active(&self) -> bool {
         self.bluetooth_active
+    }
+
+    pub fn reset_gyro_calibration(&mut self) {
+        if self.is_bluetooth_active() {
+            self.renderer.reset_gyro_calibration();
+        }
+    }
+    
+    pub fn do_gyro(&mut self, gyros: &[QGyroState]) {
+        if self.is_bluetooth_active() {
+            self.renderer.do_gyro(gyros);
+        }
     }
 
     pub fn new_scramble(&mut self) {

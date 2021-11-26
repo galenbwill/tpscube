@@ -16,7 +16,7 @@ use egui::{
 };
 use instant::Instant;
 use tpscube_core::{
-    Analysis, AnalysisStepSummary, AnalysisSummary, Cube, Cube3x3x3, CubeWithSolution, Solve,
+    Analysis, AnalysisStepSummary, AnalysisSummary, Cube, Cube3x3x3, CubeWithSolution, QGyroState, Solve,
 };
 
 const TARGET_MIN_WIDTH: f32 = 280.0;
@@ -71,6 +71,10 @@ impl SolveDetailsWindow {
             last_frame: Instant::now(),
             mode: SolveDetailsMode::Replay,
         }
+    }
+
+    pub fn reset_gyro_calibration(&mut self) {
+        self.renderer.reset_gyro_calibration();
     }
 
     fn go_to_move_idx(&mut self, move_idx: usize) {
@@ -723,6 +727,7 @@ impl SolveDetailsWindow {
         framerate: &mut Framerate,
         cube_rect: &mut Option<Rect>,
         open: &mut bool,
+        bluetooth_gyros: Vec<QGyroState>,
     ) {
         let full_rect = ctxt.available_rect();
 
@@ -859,6 +864,10 @@ impl SolveDetailsWindow {
                 }
             });
 
+        if bluetooth_gyros.len() != 0 {
+            framerate.request_max();
+            self.renderer.do_gyro(&bluetooth_gyros);
+        }
         // Update replay state if playing
         if self.playing
             && self.solve.moves.is_some()

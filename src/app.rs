@@ -296,11 +296,18 @@ impl App for Application {
                             width: 1.0,
                             color: Theme::Yellow.into(),
                         };
+                        #[cfg(not(target_arch = "wasm32"))]
                         if ui
                             .header_label("⚖", "Calibrate", landscape, false)
                             .clicked()
                         {
-                            self.timer_widget.cube.renderer.reset_gyro_calibration();
+                            if self.bluetooth_dialog_open {
+                                self.bluetooth.reset_gyro_calibration();
+                            } else if let Some(solve_details) = &mut self.solve_details {
+                                solve_details.reset_gyro_calibration();
+                            } else if self.average_details.is_none() {
+                                self.timer_widget.reset_gyro_calibration();
+                            }
                         }
 
                         // Check status of sync and create tooltip text for sync button
@@ -502,11 +509,25 @@ impl App for Application {
 
             if let Some(solve_details) = &mut self.solve_details {
                 let mut open = true;
+                #[cfg(target_arch = "wasm32")]
+                let bluetooth_gyros = Vec::new();
+                #[cfg(not(target_arch = "wasm32"))]
+                let bluetooth_gyros = if !self.bluetooth_dialog_open && self.bluetooth.ready() {
+                    framerate.request_max();
+                    let gyros = self.bluetooth.new_gyros();
+                    gyros
+                } else {
+                    Vec::new()
+                };
+                // if bluetooth_gyros.len() != 0 {
+                //     framerate.request_max();
+                // }
                 solve_details.update(
                     ctxt,
                     framerate,
                     &mut self.solve_details_cube_rect,
                     &mut open,
+                    bluetooth_gyros,
                 );
                 if !open || escape_down {
                     self.solve_details = None;
