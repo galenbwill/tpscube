@@ -53,6 +53,14 @@ impl BluetoothState {
         }
     }
 
+    pub fn supports_gyro(&self) -> bool {
+        self.active() && if let Some(cube) = &self.cube {
+            cube.supports_gyro()
+        } else {
+            false
+        }
+    }
+
     pub fn reset_gyro_calibration(&mut self) {
         // let gyro_queue = self.gyro_queue.lock().unwrap();
         // if gyro_queue.len() > 0 && gyro_queue[0].len() > 0 {

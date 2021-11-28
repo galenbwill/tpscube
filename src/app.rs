@@ -297,9 +297,24 @@ impl App for Application {
                             color: Theme::Yellow.into(),
                         };
                         #[cfg(not(target_arch = "wasm32"))]
-                        if ui
-                            .header_label("⚖", "Calibrate", landscape, false)
-                            .clicked()
+                        // let mut calibrate_enabled = self.bluetooth.active();
+                        // let &mut calibrate_enabled = if self.bluetooth.active() {
+                        //     Sense::click()
+                        // } else {
+                        //     Sense::nothing()
+                        // };
+                        if self.bluetooth.active()
+                            && self.bluetooth.supports_gyro()
+                            && ui
+                                .header_label("⚖", "Calibrate", landscape, false)
+                                .on_hover_text(
+                                    "To calibrate gyroscope:\n\
+                                    1. Click Calibrate.\n\
+                                    2. Notice which face color shows in front on screen.\n\
+                                    3. Turn physical cube to face that color to front.\n\
+                                    4. Click Calibrate again.",
+                                )
+                                .clicked()
                         {
                             if self.bluetooth_dialog_open {
                                 self.bluetooth.reset_gyro_calibration();

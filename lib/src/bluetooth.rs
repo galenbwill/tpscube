@@ -40,6 +40,9 @@ pub(crate) trait BluetoothCubeDevice: Send {
     fn clock_ratio_range(&self) -> (f64, f64) {
         (0.98, 1.02)
     }
+    fn supports_gyro(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -157,6 +160,14 @@ impl BluetoothCube {
             gyro_listeners,
             next_listener_id: AtomicU64::new(0),
             error,
+        }
+    }
+
+    pub fn supports_gyro(&self) -> bool {
+        if let Some(device) = self.connected_device.lock().unwrap().deref() {
+            device.supports_gyro()
+        } else {
+            false
         }
     }
 
@@ -500,7 +511,6 @@ impl BluetoothCube {
         &self,
         func: F,
     ) -> GyroListenerHandle {
-        // println!("register_gyro_listener");
         let id = self.next_listener_id.fetch_add(1, Ordering::SeqCst);
         let handle = GyroListenerHandle { id };
         self.gyro_listeners

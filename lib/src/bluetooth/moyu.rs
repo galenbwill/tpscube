@@ -190,6 +190,10 @@ impl<P: Peripheral> BluetoothCubeDevice for MoYuCube<P> {
         self.state.lock().unwrap().clone()
     }
 
+    fn supports_gyro(&self) -> bool {
+        true
+    }
+
     fn battery_percentage(&self) -> Option<u32> {
         None
     }
