@@ -7,6 +7,8 @@ use crate::common::TimedMove;
 use crate::cube3x3x3::Cube3x3x3;
 use crate::gyro::QGyroState;
 use anyhow::{anyhow, Result};
+use btleplug::api::bleuuid::uuid_from_u32;
+use btleplug::api::ScanFilter;
 use btleplug::api::{BDAddr, Central, Peripheral};
 use gan::gan_cube_connect;
 use giiker::giiker_connect;
@@ -18,9 +20,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+#[cfg(target_os = "macos")]
+use btleplug::api::Manager as _;
 #[cfg(target_os = "linux")]
 use btleplug::bluez::{adapter::Adapter, manager::Manager};
-#[cfg(target_os = "macos")]
 use btleplug::platform::Manager;
 #[cfg(target_os = "windows")]
 use btleplug::winrtble::{adapter::Adapter, manager::Manager};
@@ -130,8 +133,9 @@ impl BluetoothCube {
         let listeners_copy = listeners.clone();
         let gyro_listeners_copy = gyro_listeners.clone();
         let error_copy = error.clone();
-        std::thread::spawn(move || {
-            match Self::discovery_handler(
+        std::thread::spawn( move || async {
+            // match 
+            Self::discovery_handler(
                 discovered_devices_copy,
                 to_connect_copy,
                 state_copy.clone(),
@@ -140,13 +144,14 @@ impl BluetoothCube {
                 battery_copy,
                 listeners_copy,
                 gyro_listeners_copy,
-            ) {
-                Err(error) => {
-                    *state_copy.lock().unwrap() = BluetoothCubeState::Error;
-                    *error_copy.lock().unwrap() = Some(error.to_string());
-                }
-                _ => (),
-            }
+            ).await
+            //  {
+            //     Err(error) => {
+            //         *state_copy.lock().unwrap() = BluetoothCubeState::Error;
+            //         *error_copy.lock().unwrap() = Some(error.to_string());
+            //     },
+            //     _ => (),
+            // }
         });
 
         Self {
@@ -171,7 +176,7 @@ impl BluetoothCube {
         }
     }
 
-    fn discovery_handler(
+    async fn discovery_handler(
         discovered_devices: Arc<Mutex<Vec<AvailableDevice>>>,
         to_connect: Arc<Mutex<Option<BDAddr>>>,
         state: Arc<Mutex<BluetoothCubeState>>,
@@ -182,21 +187,23 @@ impl BluetoothCube {
             Mutex<HashMap<MoveListenerHandle, Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send>>>,
         >,
         gyro_listeners: Arc<Mutex<HashMap<GyroListenerHandle, Box<dyn Fn(&[QGyroState]) + Send>>>>,
-    ) -> Result<()> {
-        let manager = Manager::new()?;
-        let adapter = manager.adapters()?;
+    )  {
+        let manager = Manager::new().await?;
+        let adapter = manager.adapters().await?;
         let central = adapter
             .into_iter()
             .nth(0)
             .ok_or_else(|| anyhow!("No Bluetooth adapters found"))?;
-        central.start_scan()?;
+        central.start_scan(ScanFilter {
+            services: [uuid_from_u32(0)].to_vec(),
+        });
 
         loop {
             // See if the client asked to connect to a cube
             let to_connect = to_connect.lock().unwrap().clone();
             if let Some(to_connect) = to_connect {
                 // Look for the cube in the device list to get the Peripheral object
-                for device in central.peripherals() {
+                for device in central.peripherals().await?.into_iter() {
                     if to_connect == device.address() {
                         let listeners_copy = listeners.clone();
                         let gyro_listeners_copy = gyro_listeners.clone();
@@ -335,8 +342,8 @@ impl BluetoothCube {
 
             // Enumerate devices
             let mut new_devices = Vec::new();
-            for device in central.peripherals() {
-                if let Some(name) = device.properties().local_name {
+            for device in central.peripherals().await?.into_iter() {
+                if let Some(name) = device.properties().await?.unwrap().local_name {
                     match BluetoothCubeType::from_name(&name) {
                         Some(cube_type) => {
                             new_devices.push(AvailableDevice {
@@ -357,7 +364,7 @@ impl BluetoothCube {
         }
     }
 
-    fn connect_handler<P: Peripheral + 'static>(
+    async fn connect_handler<P: Peripheral + 'static>(
         state: Arc<Mutex<BluetoothCubeState>>,
         connected_device: Arc<Mutex<Option<Box<dyn BluetoothCubeDevice>>>>,
         connected_name: Arc<Mutex<Option<String>>>,
@@ -368,7 +375,7 @@ impl BluetoothCube {
         gyro_listener: Box<dyn Fn(&[QGyroState]) + Send + 'static>,
     ) -> Result<()> {
         // Determine cube type
-        let name = peripheral.properties().local_name.clone();
+        let name = peripheral.properties().await?.unwrap().local_name.clone();
         let cube_type = if let Some(name) = &name {
             match BluetoothCubeType::from_name(&name) {
                 Some(cube_type) => cube_type,
@@ -381,10 +388,10 @@ impl BluetoothCube {
         *state.lock().unwrap() = BluetoothCubeState::Connecting;
 
         // Connect to the cube
-        peripheral.connect()?;
+        peripheral.connect().await?;
 
         let cube = match cube_type {
-            BluetoothCubeType::GAN => gan_cube_connect(peripheral, move_listener)?,
+            BluetoothCubeType::GAN => gan_cube_connect(peripheral, move_listener).await?,
             BluetoothCubeType::GoCube => gocube_connect(peripheral, move_listener)?,
             BluetoothCubeType::Giiker => giiker_connect(peripheral, move_listener)?,
             BluetoothCubeType::MoYu => moyu_connect(peripheral, move_listener, gyro_listener)?,
