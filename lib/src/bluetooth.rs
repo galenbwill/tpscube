@@ -188,12 +188,12 @@ impl BluetoothCube {
         >,
         gyro_listeners: Arc<Mutex<HashMap<GyroListenerHandle, Box<dyn Fn(&[QGyroState]) + Send>>>>,
     )  {
-        let manager = Manager::new().await?;
-        let adapter = manager.adapters().await?;
+        let manager = Manager::new().await;
+        let adapter = manager.unwrap().adapters().await.unwrap();
         let central = adapter
             .into_iter()
             .nth(0)
-            .ok_or_else(|| anyhow!("No Bluetooth adapters found"))?;
+            .ok_or_else(|| anyhow!("No Bluetooth adapters found")).unwrap();
         central.start_scan(ScanFilter {
             services: [uuid_from_u32(0)].to_vec(),
         });
@@ -203,7 +203,7 @@ impl BluetoothCube {
             let to_connect = to_connect.lock().unwrap().clone();
             if let Some(to_connect) = to_connect {
                 // Look for the cube in the device list to get the Peripheral object
-                for device in central.peripherals().await?.into_iter() {
+                for device in central.peripherals().await.unwrap().into_iter() {
                     if to_connect == device.address() {
                         let listeners_copy = listeners.clone();
                         let gyro_listeners_copy = gyro_listeners.clone();
@@ -342,8 +342,9 @@ impl BluetoothCube {
 
             // Enumerate devices
             let mut new_devices = Vec::new();
-            for device in central.peripherals().await?.into_iter() {
-                if let Some(name) = device.properties().await?.unwrap().local_name {
+            for device in central.peripherals().await.unwrap().into_iter() {
+                if let Some(property) = device.properties().await.unwrap() {
+                    let name = property.local_name.unwrap();
                     match BluetoothCubeType::from_name(&name) {
                         Some(cube_type) => {
                             new_devices.push(AvailableDevice {

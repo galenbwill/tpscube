@@ -331,9 +331,11 @@ impl<P: Peripheral> BluetoothCubeDevice for GANCubeVersion1<P> {
     }
 
     fn update(&self) {
-        if let Err(_) = self.move_poll() {
-            *self.synced.lock().unwrap() = false;
-        }
+        let fut = async {
+            if let Err(_) = self.move_poll().await {
+                *self.synced.lock().unwrap() = false;
+            }
+        };
     }
 
     fn disconnect(&self) {
@@ -393,7 +395,7 @@ impl<P: Peripheral + 'static> GANCubeVersion2<P> {
         device: P,
         read: Characteristic,
         write: Characteristic,
-        move_listener: Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send + 'static>,
+        move_listener: &Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send + 'static>,
     ) -> Result<Self> {
         // Derive keys. These are based on a 6 byte device identifier found in the
         // manufacturer data.
@@ -433,19 +435,19 @@ impl<P: Peripheral + 'static> GANCubeVersion2<P> {
         let state_set = Arc::new(Mutex::new(false));
         let battery_percentage = Arc::new(Mutex::new(None));
         let battery_charging = Arc::new(Mutex::new(None));
-        let last_move_count = Mutex::new(None);
+        let last_move_count = &Mutex::new(None);
         let synced = Arc::new(Mutex::new(true));
 
         let cipher_copy = cipher.clone();
-        let state_copy = state.clone();
-        let state_set_copy = state_set.clone();
-        let battery_percentage_copy = battery_percentage.clone();
-        let battery_charging_copy = battery_charging.clone();
-        let synced_copy = synced.clone();
+        let state_copy = &state.clone();
+        let state_set_copy = &state_set.clone();
+        let battery_percentage_copy = &battery_percentage.clone();
+        let battery_charging_copy = &battery_charging.clone();
+        let synced_copy = &synced.clone();
 
-        let notifications = device.notifications();
+        let notifications = device.notifications().await.unwrap();
 
-        notifications.await.unwrap().for_each( |value| async move {
+        notifications.for_each(|value| async move {
             let cipher_copy = RefCell::new(cipher_copy).into_inner();
             if let Ok(value) = cipher_copy.decrypt(&value.value) {
                 let message_type = Self::extract_bits(&value, 0, 4) as u8;
@@ -848,14 +850,14 @@ pub(crate) async fn gan_cube_connect<P: Peripheral + 'static>(
             device,
             characteristics,
             move_listener,
-        )?))
+        ).await.unwrap()))
     } else if v2_read.is_some() && v2_write.is_some() {
         Ok(Box::new(GANCubeVersion2::new(
             device,
             v2_read.unwrap(),
             v2_write.unwrap(),
-            move_listener,
-        )?))
+            &move_listener,
+        ).await.unwrap()))
     } else {
         Err(anyhow!("Unrecognized GAN cube version"))
     }
