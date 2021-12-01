@@ -3,6 +3,7 @@ use crate::common::{Color, Cube, Face, Move, TimedMove};
 use crate::cube3x3x3::{Cube3x3x3, Cube3x3x3Faces};
 use anyhow::{anyhow, Result};
 use btleplug::api::{Characteristic, Peripheral, WriteType};
+use futures_util::stream::StreamExt;
 use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -29,25 +30,27 @@ impl<P: Peripheral + 'static> GoCube<P> {
 
     const CUBE_STATE_TIMEOUT_MS: usize = 2000;
 
-    pub fn new(
+    pub async fn new(
         device: P,
         read: Characteristic,
         write: Characteristic,
-        move_listener: Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send + 'static>,
+        move_listener: &Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send + 'static>,
     ) -> Result<Self> {
         let state = Arc::new(Mutex::new(Cube3x3x3::new()));
         let state_set = Arc::new(Mutex::new(false));
         let battery_percentage = Arc::new(Mutex::new(None));
         let synced = Arc::new(Mutex::new(true));
 
-        let state_copy = state.clone();
-        let state_set_copy = state_set.clone();
-        let battery_percentage_copy = battery_percentage.clone();
-        let synced_copy = synced.clone();
-        let start_time = Mutex::new(Instant::now());
-        let last_move_time = Mutex::new(0);
+        let state_copy = &state.clone();
+        let state_set_copy = &state_set.clone();
+        let battery_percentage_copy = &battery_percentage.clone();
+        let synced_copy = &synced.clone();
+        let start_time = &Mutex::new(Instant::now());
+        let last_move_time = &Mutex::new(0);
 
-        device.on_notification(Box::new(move |value| {
+        let notifications = device.notifications().await.unwrap();
+
+        notifications.for_each(|value| async move {
             if value.value.len() < 4 {
                 *synced_copy.lock().unwrap() = false;
                 return;
@@ -124,24 +127,28 @@ impl<P: Peripheral + 'static> GoCube<P> {
                 }
                 _ => (),
             }
-        }));
-        device.subscribe(&read)?;
+        });
+        device.subscribe(&read).await;
 
         // Turn off orientation messages
-        device.write(
-            &write,
-            &[Self::DISABLE_ORIENTATION_MESSAGE],
-            WriteType::WithResponse,
-        )?;
+        device
+            .write(
+                &write,
+                &[Self::DISABLE_ORIENTATION_MESSAGE],
+                WriteType::WithResponse,
+            )
+            .await;
 
         // Request initial cube state
         let mut loop_count = 0;
         loop {
-            device.write(
-                &write,
-                &[Self::REQUEST_STATE_MESSAGE],
-                WriteType::WithResponse,
-            )?;
+            device
+                .write(
+                    &write,
+                    &[Self::REQUEST_STATE_MESSAGE],
+                    WriteType::WithResponse,
+                )
+                .await;
 
             std::thread::sleep(Duration::from_millis(200));
 
@@ -156,11 +163,13 @@ impl<P: Peripheral + 'static> GoCube<P> {
         }
 
         // Request battery state
-        device.write(
-            &write,
-            &[Self::REQUEST_BATTERY_MESSAGE],
-            WriteType::WithResponse,
-        )?;
+        device
+            .write(
+                &write,
+                &[Self::REQUEST_BATTERY_MESSAGE],
+                WriteType::WithResponse,
+            )
+            .await?;
 
         Ok(Self {
             device,
@@ -256,11 +265,12 @@ impl<P: Peripheral> BluetoothCubeDevice for GoCube<P> {
     }
 }
 
-pub(crate) fn gocube_connect<P: Peripheral + 'static>(
+pub(crate) async fn gocube_connect<P: Peripheral + 'static>(
     device: P,
     move_listener: Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send + 'static>,
 ) -> Result<Box<dyn BluetoothCubeDevice>> {
-    let characteristics = device.discover_characteristics()?;
+    let characteristics = device.characteristics();
+    device.discover_services().await;
 
     let mut write = None;
     let mut read = None;
@@ -274,12 +284,11 @@ pub(crate) fn gocube_connect<P: Peripheral + 'static>(
         }
     }
     if read.is_some() && write.is_some() {
-        Ok(Box::new(GoCube::new(
-            device,
-            read.unwrap(),
-            write.unwrap(),
-            move_listener,
-        )?))
+        Ok(Box::new(
+            GoCube::new(device, read.unwrap(), write.unwrap(), &move_listener)
+                .await
+                .unwrap(),
+        ))
     } else {
         Err(anyhow!("Unrecognized GoCube version"))
     }

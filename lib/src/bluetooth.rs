@@ -393,7 +393,7 @@ impl BluetoothCube {
 
         let cube = match cube_type {
             BluetoothCubeType::GAN => gan_cube_connect(peripheral, move_listener).await?,
-            BluetoothCubeType::GoCube => gocube_connect(peripheral, move_listener)?,
+            BluetoothCubeType::GoCube => gocube_connect(peripheral, move_listener).await?,
             BluetoothCubeType::Giiker => giiker_connect(peripheral, move_listener).await?,
             BluetoothCubeType::MoYu => moyu_connect(peripheral, move_listener, gyro_listener)?,
         };
