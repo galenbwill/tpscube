@@ -3,6 +3,7 @@ use crate::common::{Cube, Move, TimedMove};
 use crate::cube3x3x3::Cube3x3x3;
 use anyhow::{anyhow, Result};
 use btleplug::api::{Characteristic, Peripheral};
+use futures_util::stream::StreamExt;
 use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -22,10 +23,10 @@ impl<P: Peripheral + 'static> GiikerCube<P> {
         0x02, 0xa9, 0x27, 0xa5, 0xab, 0x29,
     ];
 
-    pub fn new(
+    pub async fn new(
         device: P,
         move_data: Characteristic,
-        move_listener: Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send + 'static>,
+        move_listener: &Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send + 'static>,
     ) -> Result<Self> {
         // Any writes at all to characteristics on this cube will hang forever, as this
         // cube does not respond to bluetooth writes correctly. We cannot request battery
@@ -34,14 +35,16 @@ impl<P: Peripheral + 'static> GiikerCube<P> {
         // we maintain.
         let state = Arc::new(Mutex::new(Cube3x3x3::new()));
 
-        let first = Mutex::new(true);
-        let state_copy = state.clone();
+        let first = &Mutex::new(true);
+        let state_copy = &state.clone();
         let synced = Arc::new(Mutex::new(true));
-        let synced_copy = synced.clone();
-        let start_time = Mutex::new(Instant::now());
-        let last_move_time = Mutex::new(0);
+        let synced_copy = &synced.clone();
+        let start_time = &Mutex::new(Instant::now());
+        let last_move_time = &Mutex::new(0);
 
-        device.on_notification(Box::new(move |value| {
+        let notifications = device.notifications().await.unwrap();
+
+        notifications.for_each(|value| async move {
             let mut value = value.value.clone();
             if value.len() < 20 {
                 *synced_copy.lock().unwrap() = false;
@@ -105,8 +108,8 @@ impl<P: Peripheral + 'static> GiikerCube<P> {
                 &[TimedMove::new(mv, move_time as u32)],
                 state_copy.lock().unwrap().deref(),
             );
-        }));
-        device.subscribe(&move_data)?;
+        });
+        device.subscribe(&move_data).await;
 
         Ok(Self {
             device,
@@ -145,11 +148,12 @@ impl<P: Peripheral + 'static> BluetoothCubeDevice for GiikerCube<P> {
     }
 }
 
-pub(crate) fn giiker_connect<P: Peripheral + 'static>(
+pub(crate) async fn giiker_connect<P: Peripheral + 'static>(
     device: P,
     move_listener: Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send + 'static>,
 ) -> Result<Box<dyn BluetoothCubeDevice>> {
-    let characteristics = device.discover_characteristics()?;
+    let characteristics = device.characteristics();
+    device.discover_services().await;
 
     let mut move_data = None;
     for characteristic in characteristics {
@@ -158,11 +162,11 @@ pub(crate) fn giiker_connect<P: Peripheral + 'static>(
         }
     }
     if move_data.is_some() {
-        Ok(Box::new(GiikerCube::new(
-            device,
-            move_data.unwrap(),
-            move_listener,
-        )?))
+        Ok(Box::new(
+            GiikerCube::new(device, move_data.unwrap(), &move_listener)
+                .await
+                .unwrap(),
+        ))
     } else {
         Err(anyhow!("Unrecognized Giiker version"))
     }
