@@ -44,72 +44,74 @@ impl<P: Peripheral + 'static> GiikerCube<P> {
 
         let notifications = device.notifications().await.unwrap();
 
-        notifications.for_each(|value| async move {
-            let mut value = value.value.clone();
-            if value.len() < 20 {
-                *synced_copy.lock().unwrap() = false;
-                return;
-            }
-
-            if *first.lock().unwrap() {
-                // Ignore first move data since it is from before connection.
-                *first.lock().unwrap() = false;
-                return;
-            }
-
-            // Check for encoded packets
-            if value[18] == 0xa7 {
-                let key_offset_a = (value[19] >> 4) as usize;
-                let key_offset_b = (value[19] & 0xf) as usize;
-                for i in 0..18 {
-                    value[i] = value[i].wrapping_add(
-                        Self::KEY_STREAM[i + key_offset_a]
-                            .wrapping_add(Self::KEY_STREAM[i + key_offset_b]),
-                    );
-                }
-            }
-
-            let mv = match value[16] {
-                0x11 => Move::B,
-                0x12 => Move::B2,
-                0x13 => Move::Bp,
-                0x21 => Move::D,
-                0x22 => Move::D2,
-                0x23 => Move::Dp,
-                0x31 => Move::L,
-                0x32 => Move::L2,
-                0x33 => Move::Lp,
-                0x41 => Move::U,
-                0x42 => Move::U2,
-                0x43 => Move::Up,
-                0x51 => Move::R,
-                0x52 => Move::R2,
-                0x53 => Move::Rp,
-                0x61 => Move::F,
-                0x62 => Move::F2,
-                0x63 => Move::Fp,
-                _ => {
+        notifications
+            .for_each(|value| async move {
+                let mut value = value.value.clone();
+                if value.len() < 20 {
                     *synced_copy.lock().unwrap() = false;
                     return;
                 }
-            };
 
-            // Apply move to the cube state.
-            state_copy.lock().unwrap().do_move(mv);
+                if *first.lock().unwrap() {
+                    // Ignore first move data since it is from before connection.
+                    *first.lock().unwrap() = false;
+                    return;
+                }
 
-            // Get time since last move. Keep computation relative to start time so
-            // that rounding errors don't cause errors in the total time.
-            let current_time = (Instant::now() - *start_time.lock().unwrap()).as_millis();
-            let move_time = current_time - *last_move_time.lock().unwrap();
-            *last_move_time.lock().unwrap() = current_time;
+                // Check for encoded packets
+                if value[18] == 0xa7 {
+                    let key_offset_a = (value[19] >> 4) as usize;
+                    let key_offset_b = (value[19] & 0xf) as usize;
+                    for i in 0..18 {
+                        value[i] = value[i].wrapping_add(
+                            Self::KEY_STREAM[i + key_offset_a]
+                                .wrapping_add(Self::KEY_STREAM[i + key_offset_b]),
+                        );
+                    }
+                }
 
-            // Let clients know there is a new move
-            move_listener(
-                &[TimedMove::new(mv, move_time as u32)],
-                state_copy.lock().unwrap().deref(),
-            );
-        });
-        device.subscribe(&move_data).await;
+                let mv = match value[16] {
+                    0x11 => Move::B,
+                    0x12 => Move::B2,
+                    0x13 => Move::Bp,
+                    0x21 => Move::D,
+                    0x22 => Move::D2,
+                    0x23 => Move::Dp,
+                    0x31 => Move::L,
+                    0x32 => Move::L2,
+                    0x33 => Move::Lp,
+                    0x41 => Move::U,
+                    0x42 => Move::U2,
+                    0x43 => Move::Up,
+                    0x51 => Move::R,
+                    0x52 => Move::R2,
+                    0x53 => Move::Rp,
+                    0x61 => Move::F,
+                    0x62 => Move::F2,
+                    0x63 => Move::Fp,
+                    _ => {
+                        *synced_copy.lock().unwrap() = false;
+                        return;
+                    }
+                };
+
+                // Apply move to the cube state.
+                state_copy.lock().unwrap().do_move(mv);
+
+                // Get time since last move. Keep computation relative to start time so
+                // that rounding errors don't cause errors in the total time.
+                let current_time = (Instant::now() - *start_time.lock().unwrap()).as_millis();
+                let move_time = current_time - *last_move_time.lock().unwrap();
+                *last_move_time.lock().unwrap() = current_time;
+
+                // Let clients know there is a new move
+                move_listener(
+                    &[TimedMove::new(mv, move_time as u32)],
+                    state_copy.lock().unwrap().deref(),
+                );
+            })
+            .await;
+        let _ = device.subscribe(&move_data).await;
 
         Ok(Self {
             device,
@@ -148,12 +150,16 @@ impl<P: Peripheral + 'static> BluetoothCubeDevice for GiikerCube<P> {
     }
 }
 
+pub(crate) fn giiker_scanfilter_uuid() -> Uuid {
+    Uuid::from_str("0000aadc-0000-1000-8000-00805f9b34fb").unwrap()
+}
+
 pub(crate) async fn giiker_connect<P: Peripheral + 'static>(
     device: P,
     move_listener: Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send + 'static>,
 ) -> Result<Box<dyn BluetoothCubeDevice>> {
     let characteristics = device.characteristics();
-    device.discover_services().await;
+    let _ = device.discover_services().await;
 
     let mut move_data = None;
     for characteristic in characteristics {

@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use crate::bluetooth::BluetoothCubeDevice;
 use crate::common::{Color, Cube, Face, Move, TimedMove};
 use crate::cube3x3x3::{
@@ -11,6 +10,8 @@ use aes::{
 };
 use anyhow::{anyhow, Result};
 use btleplug::api::{Characteristic, Peripheral, WriteType};
+use futures_util::stream::StreamExt;
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 use std::iter::FromIterator;
@@ -19,7 +20,6 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use uuid::Uuid;
-use futures_util::stream::StreamExt;
 
 struct GANCubeVersion1Characteristics {
     version: Characteristic,
@@ -72,7 +72,7 @@ impl<P: Peripheral + 'static> GANCubeVersion1<P> {
         move_listener: Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send + 'static>,
     ) -> Result<Self> {
         // Detect cube version
-        // let mut version: Vec<u8> = 
+        // let mut version: Vec<u8> =
         // match device.read(&characteristics.version) {
         //     Err(e) => return Err(e),
         //     Ok(v) => v,
@@ -214,13 +214,21 @@ impl<P: Peripheral + 'static> GANCubeVersion1<P> {
         }
 
         // Read move data and move timing data
-        let move_data = self.device.read(&self.characteristics.last_moves).await.unwrap();
+        let move_data = self
+            .device
+            .read(&self.characteristics.last_moves)
+            .await
+            .unwrap();
         if move_data.len() < 19 {
             return Err(anyhow!("Invalid last move data"));
         }
         let move_data = self.cipher.decrypt(&move_data)?;
 
-        let timing = self.device.read(&self.characteristics.timing).await.unwrap();
+        let timing = self
+            .device
+            .read(&self.characteristics.timing)
+            .await
+            .unwrap();
         if timing.len() < 19 {
             return Err(anyhow!("Invalid timing data"));
         }
@@ -331,7 +339,7 @@ impl<P: Peripheral> BluetoothCubeDevice for GANCubeVersion1<P> {
     }
 
     fn update(&self) {
-        let fut = async {
+        let _ = async {
             if let Err(_) = self.move_poll().await {
                 *self.synced.lock().unwrap() = false;
             }
@@ -399,7 +407,13 @@ impl<P: Peripheral + 'static> GANCubeVersion2<P> {
     ) -> Result<Self> {
         // Derive keys. These are based on a 6 byte device identifier found in the
         // manufacturer data.
-        let device_key: [u8; 6] = if let Some(data) = device.properties().await.unwrap().unwrap().manufacturer_data.get(&1)
+        let device_key: [u8; 6] = if let Some(data) = device
+            .properties()
+            .await
+            .unwrap()
+            .unwrap()
+            .manufacturer_data
+            .get(&1)
         {
             if data.len() >= 9 {
                 let mut result = [0; 6];
@@ -447,167 +461,175 @@ impl<P: Peripheral + 'static> GANCubeVersion2<P> {
 
         let notifications = device.notifications().await.unwrap();
 
-        notifications.for_each(|value| async move {
-            let cipher_copy = RefCell::new(cipher_copy).into_inner();
-            if let Ok(value) = cipher_copy.decrypt(&value.value) {
-                let message_type = Self::extract_bits(&value, 0, 4) as u8;
-                match message_type {
-                    Self::CUBE_MOVES_MESSAGE => {
-                        let current_move_count = Self::extract_bits(&value, 4, 8) as u8;
+        notifications
+            .for_each(|value| async move {
+                let cipher_copy = RefCell::new(cipher_copy).into_inner();
+                if let Ok(value) = cipher_copy.decrypt(&value.value) {
+                    let message_type = Self::extract_bits(&value, 0, 4) as u8;
+                    match message_type {
+                        Self::CUBE_MOVES_MESSAGE => {
+                            let current_move_count = Self::extract_bits(&value, 4, 8) as u8;
 
-                        // If we haven't received a cube state message yet, we can't know what
-                        // the curent cube state is. Ignore moves until the cube state message
-                        // is received. If there has been a cube state message, we will have
-                        // a last move count and we can continue.
-                        let mut last_move_count_option = last_move_count.lock().unwrap();
-                        if let Some(last_move_count) = *last_move_count_option {
-                            // Check number of moves since last message.
-                            let move_count =
-                                current_move_count.wrapping_sub(last_move_count) as usize;
-                            if move_count > 7 {
-                                // There are too many moves since the last message. Our cube
-                                // state is out of sync. Let the client know and reset the
-                                // last move count such that we don't parse any more move
-                                // messages, since they aren't valid anymore.
-                                *synced_copy.lock().unwrap() = false;
-                                *last_move_count_option = None;
-                                return;
-                            }
-
-                            // Gather the moves
-                            let mut moves = Vec::with_capacity(move_count);
-                            for j in 0..move_count {
-                                // Build move list in reverse order. In the packet the moves
-                                // are from the latest move to the oldest move, but the callback
-                                // should take the moves in the order they happened.
-                                let i = (move_count - 1) - j;
-
-                                // Decode move data
-                                let move_num = Self::extract_bits(&value, 12 + i * 5, 5) as usize;
-                                let move_time = Self::extract_bits(&value, 12 + 7 * 5 + i * 16, 16);
-                                const MOVES: &[Move] = &[
-                                    Move::U,
-                                    Move::Up,
-                                    Move::R,
-                                    Move::Rp,
-                                    Move::F,
-                                    Move::Fp,
-                                    Move::D,
-                                    Move::Dp,
-                                    Move::L,
-                                    Move::Lp,
-                                    Move::B,
-                                    Move::Bp,
-                                ];
-                                if move_num >= MOVES.len() {
-                                    // Bad move data. Cube is now desynced.
+                            // If we haven't received a cube state message yet, we can't know what
+                            // the curent cube state is. Ignore moves until the cube state message
+                            // is received. If there has been a cube state message, we will have
+                            // a last move count and we can continue.
+                            let mut last_move_count_option = last_move_count.lock().unwrap();
+                            if let Some(last_move_count) = *last_move_count_option {
+                                // Check number of moves since last message.
+                                let move_count =
+                                    current_move_count.wrapping_sub(last_move_count) as usize;
+                                if move_count > 7 {
+                                    // There are too many moves since the last message. Our cube
+                                    // state is out of sync. Let the client know and reset the
+                                    // last move count such that we don't parse any more move
+                                    // messages, since they aren't valid anymore.
                                     *synced_copy.lock().unwrap() = false;
                                     *last_move_count_option = None;
                                     return;
                                 }
-                                let mv = MOVES[move_num];
-                                moves.push(TimedMove::new(mv, move_time));
 
-                                // Apply move to the cube state.
-                                state_copy.lock().unwrap().do_move(mv);
-                            }
+                                // Gather the moves
+                                let mut moves = Vec::with_capacity(move_count);
+                                for j in 0..move_count {
+                                    // Build move list in reverse order. In the packet the moves
+                                    // are from the latest move to the oldest move, but the callback
+                                    // should take the moves in the order they happened.
+                                    let i = (move_count - 1) - j;
 
-                            *last_move_count_option = Some(current_move_count);
+                                    // Decode move data
+                                    let move_num =
+                                        Self::extract_bits(&value, 12 + i * 5, 5) as usize;
+                                    let move_time =
+                                        Self::extract_bits(&value, 12 + 7 * 5 + i * 16, 16);
+                                    const MOVES: &[Move] = &[
+                                        Move::U,
+                                        Move::Up,
+                                        Move::R,
+                                        Move::Rp,
+                                        Move::F,
+                                        Move::Fp,
+                                        Move::D,
+                                        Move::Dp,
+                                        Move::L,
+                                        Move::Lp,
+                                        Move::B,
+                                        Move::Bp,
+                                    ];
+                                    if move_num >= MOVES.len() {
+                                        // Bad move data. Cube is now desynced.
+                                        *synced_copy.lock().unwrap() = false;
+                                        *last_move_count_option = None;
+                                        return;
+                                    }
+                                    let mv = MOVES[move_num];
+                                    moves.push(TimedMove::new(mv, move_time));
 
-                            if moves.len() != 0 {
-                                // Let clients know there is a new move
-                                move_listener(&moves, state_copy.lock().unwrap().deref());
+                                    // Apply move to the cube state.
+                                    state_copy.lock().unwrap().do_move(mv);
+                                }
+
+                                *last_move_count_option = Some(current_move_count);
+
+                                if moves.len() != 0 {
+                                    // Let clients know there is a new move
+                                    move_listener(&moves, state_copy.lock().unwrap().deref());
+                                }
                             }
                         }
+                        Self::CUBE_STATE_MESSAGE => {
+                            *last_move_count.lock().unwrap() =
+                                Some(Self::extract_bits(&value, 4, 8) as u8);
+
+                            // Set up corner and edge state
+                            let mut corners = [0; 8];
+                            let mut corner_twist = [0; 8];
+                            let mut corners_left: HashSet<u32> =
+                                HashSet::from_iter((&[0, 1, 2, 3, 4, 5, 6, 7]).iter().cloned());
+                            let mut edges = [0; 12];
+                            let mut edge_parity = [0; 12];
+                            let mut edges_left: HashSet<u32> = HashSet::from_iter(
+                                (&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).iter().cloned(),
+                            );
+                            let mut total_corner_twist = 0;
+                            let mut total_edge_parity = 0;
+
+                            // Decode corners. There are only 7 in the packet because the
+                            // last one is implicit (the one missing).
+                            for i in 0..7 {
+                                corners[i] = Self::extract_bits(&value, 12 + i * 3, 3);
+                                corner_twist[i] = Self::extract_bits(&value, 33 + i * 2, 2);
+                                total_corner_twist += corner_twist[i];
+                                if !corners_left.remove(&corners[i]) || corner_twist[i] >= 3 {
+                                    return;
+                                }
+                            }
+
+                            // Decode edges. There are only 11 in the packet because the
+                            // last one is implicit (the one missing).
+                            for i in 0..11 {
+                                edges[i] = Self::extract_bits(&value, 47 + i * 4, 4);
+                                edge_parity[i] = Self::extract_bits(&value, 91 + i, 1);
+                                total_edge_parity += edge_parity[i];
+                                if !edges_left.remove(&edges[i]) || edge_parity[i] >= 2 {
+                                    return;
+                                }
+                            }
+
+                            // Add in the missing corner and edge based on the last one
+                            // left. There will always be exactly one left since we
+                            // already verified each corner and edge was unique.
+                            corners[7] = *corners_left.iter().next().unwrap();
+                            edges[11] = *edges_left.iter().next().unwrap();
+
+                            // Compute the corner twist and edge parity of the last corner
+                            // and edge piece. The corner twist must be a multiple of 3 and
+                            // the edge parity must be even.
+                            corner_twist[7] = (3 - total_corner_twist % 3) % 3;
+                            edge_parity[11] = total_edge_parity & 1;
+
+                            // Create cube state. Our representation of the cube state matches
+                            // the one used in the packet. We have already verified the data
+                            // is valid so we can unwrap the conversions with panic.
+                            let mut corner_pieces = Vec::with_capacity(8);
+                            let mut edge_pieces = Vec::with_capacity(12);
+                            for i in 0..8 {
+                                corner_pieces.push(CornerPiece3x3x3 {
+                                    piece: Corner3x3x3::try_from(corners[i] as u8).unwrap(),
+                                    orientation: corner_twist[i] as u8,
+                                });
+                            }
+                            for i in 0..12 {
+                                edge_pieces.push(EdgePiece3x3x3 {
+                                    piece: Edge3x3x3::try_from(edges[i] as u8).unwrap(),
+                                    orientation: edge_parity[i] as u8,
+                                });
+                            }
+
+                            let cube = Cube3x3x3::from_corners_and_edges(
+                                corner_pieces.try_into().unwrap(),
+                                edge_pieces.try_into().unwrap(),
+                            );
+
+                            *state_copy.lock().unwrap() = cube;
+                            *state_set_copy.lock().unwrap() = true;
+                        }
+                        Self::BATTERY_STATE_MESSAGE => {
+                            *battery_charging_copy.lock().unwrap() =
+                                Some(Self::extract_bits(&value, 4, 4) != 0);
+                            *battery_percentage_copy.lock().unwrap() =
+                                Some(Self::extract_bits(&value, 8, 8));
+                        }
+                        _ => (),
                     }
-                    Self::CUBE_STATE_MESSAGE => {
-                        *last_move_count.lock().unwrap() =
-                            Some(Self::extract_bits(&value, 4, 8) as u8);
-
-                        // Set up corner and edge state
-                        let mut corners = [0; 8];
-                        let mut corner_twist = [0; 8];
-                        let mut corners_left: HashSet<u32> =
-                            HashSet::from_iter((&[0, 1, 2, 3, 4, 5, 6, 7]).iter().cloned());
-                        let mut edges = [0; 12];
-                        let mut edge_parity = [0; 12];
-                        let mut edges_left: HashSet<u32> = HashSet::from_iter(
-                            (&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).iter().cloned(),
-                        );
-                        let mut total_corner_twist = 0;
-                        let mut total_edge_parity = 0;
-
-                        // Decode corners. There are only 7 in the packet because the
-                        // last one is implicit (the one missing).
-                        for i in 0..7 {
-                            corners[i] = Self::extract_bits(&value, 12 + i * 3, 3);
-                            corner_twist[i] = Self::extract_bits(&value, 33 + i * 2, 2);
-                            total_corner_twist += corner_twist[i];
-                            if !corners_left.remove(&corners[i]) || corner_twist[i] >= 3 {
-                                return;
-                            }
-                        }
-
-                        // Decode edges. There are only 11 in the packet because the
-                        // last one is implicit (the one missing).
-                        for i in 0..11 {
-                            edges[i] = Self::extract_bits(&value, 47 + i * 4, 4);
-                            edge_parity[i] = Self::extract_bits(&value, 91 + i, 1);
-                            total_edge_parity += edge_parity[i];
-                            if !edges_left.remove(&edges[i]) || edge_parity[i] >= 2 {
-                                return;
-                            }
-                        }
-
-                        // Add in the missing corner and edge based on the last one
-                        // left. There will always be exactly one left since we
-                        // already verified each corner and edge was unique.
-                        corners[7] = *corners_left.iter().next().unwrap();
-                        edges[11] = *edges_left.iter().next().unwrap();
-
-                        // Compute the corner twist and edge parity of the last corner
-                        // and edge piece. The corner twist must be a multiple of 3 and
-                        // the edge parity must be even.
-                        corner_twist[7] = (3 - total_corner_twist % 3) % 3;
-                        edge_parity[11] = total_edge_parity & 1;
-
-                        // Create cube state. Our representation of the cube state matches
-                        // the one used in the packet. We have already verified the data
-                        // is valid so we can unwrap the conversions with panic.
-                        let mut corner_pieces = Vec::with_capacity(8);
-                        let mut edge_pieces = Vec::with_capacity(12);
-                        for i in 0..8 {
-                            corner_pieces.push(CornerPiece3x3x3 {
-                                piece: Corner3x3x3::try_from(corners[i] as u8).unwrap(),
-                                orientation: corner_twist[i] as u8,
-                            });
-                        }
-                        for i in 0..12 {
-                            edge_pieces.push(EdgePiece3x3x3 {
-                                piece: Edge3x3x3::try_from(edges[i] as u8).unwrap(),
-                                orientation: edge_parity[i] as u8,
-                            });
-                        }
-
-                        let cube = Cube3x3x3::from_corners_and_edges(
-                            corner_pieces.try_into().unwrap(),
-                            edge_pieces.try_into().unwrap(),
-                        );
-
-                        *state_copy.lock().unwrap() = cube;
-                        *state_set_copy.lock().unwrap() = true;
-                    }
-                    Self::BATTERY_STATE_MESSAGE => {
-                        *battery_charging_copy.lock().unwrap() =
-                            Some(Self::extract_bits(&value, 4, 4) != 0);
-                        *battery_percentage_copy.lock().unwrap() =
-                            Some(Self::extract_bits(&value, 8, 8));
-                    }
-                    _ => (),
                 }
-            }
+            })
+            .await;
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let _ = device.subscribe(&read).await;
+            ()
         });
-        device.subscribe(&read).await;
 
         // Request initial cube state
         let mut loop_count = 0;
@@ -615,7 +637,7 @@ impl<P: Peripheral + 'static> GANCubeVersion2<P> {
             let mut message: [u8; 20] = [0; 20];
             message[0] = Self::CUBE_STATE_MESSAGE;
             let message = cipher.encrypt(&message)?;
-            device.write(&write, &message, WriteType::WithResponse);
+            let _ = device.write(&write, &message, WriteType::WithResponse).await;
 
             std::thread::sleep(Duration::from_millis(200));
 
@@ -633,7 +655,9 @@ impl<P: Peripheral + 'static> GANCubeVersion2<P> {
         let mut message: [u8; 20] = [0; 20];
         message[0] = Self::BATTERY_STATE_MESSAGE;
         let message = cipher.encrypt(&message)?;
-        device.write(&write, &message, WriteType::WithResponse).await;
+        let _ = device
+            .write(&write, &message, WriteType::WithResponse)
+            .await;
 
         Ok(Self {
             device,
@@ -777,6 +801,11 @@ impl<P: Peripheral> BluetoothCubeDevice for GANCubeVersion2<P> {
     fn disconnect(&self) {
         let _ = self.device.disconnect();
     }
+
+}
+
+pub(crate) fn gan_cube_scanfilter_uuid() -> Uuid {
+    Uuid::from_str("00002a28-0000-1000-8000-00805f9b34fb").unwrap()
 }
 
 pub(crate) async fn gan_cube_connect<P: Peripheral + 'static>(
@@ -784,7 +813,7 @@ pub(crate) async fn gan_cube_connect<P: Peripheral + 'static>(
     move_listener: Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send + 'static>,
 ) -> Result<Box<dyn BluetoothCubeDevice>> {
     let characteristics = device.characteristics();
-    device.discover_services().await;
+    let _ = device.discover_services().await;
 
     // Find characteristics for communicating with the cube. There are two different
     // versions of the GAN cubes with different characteristics.
@@ -846,18 +875,17 @@ pub(crate) async fn gan_cube_connect<P: Peripheral + 'static>(
             timing: v1_timing.unwrap(),
             battery: v1_battery.unwrap(),
         };
-        Ok(Box::new(GANCubeVersion1::new(
-            device,
-            characteristics,
-            move_listener,
-        ).await.unwrap()))
+        Ok(Box::new(
+            GANCubeVersion1::new(device, characteristics, move_listener)
+                .await
+                .unwrap(),
+        ))
     } else if v2_read.is_some() && v2_write.is_some() {
-        Ok(Box::new(GANCubeVersion2::new(
-            device,
-            v2_read.unwrap(),
-            v2_write.unwrap(),
-            &move_listener,
-        ).await.unwrap()))
+        Ok(Box::new(
+            GANCubeVersion2::new(device, v2_read.unwrap(), v2_write.unwrap(), &move_listener)
+                .await
+                .unwrap(),
+        ))
     } else {
         Err(anyhow!("Unrecognized GAN cube version"))
     }

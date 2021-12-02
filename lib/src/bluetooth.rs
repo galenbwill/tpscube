@@ -10,15 +10,17 @@ use anyhow::{anyhow, Result};
 use btleplug::api::bleuuid::uuid_from_u32;
 use btleplug::api::ScanFilter;
 use btleplug::api::{BDAddr, Central, Peripheral};
-use gan::gan_cube_connect;
-use giiker::giiker_connect;
-use gocube::gocube_connect;
-use moyu::moyu_connect;
+use gan::{gan_cube_connect, gan_cube_scanfilter_uuid};
+use giiker::{giiker_connect, giiker_scanfilter_uuid};
+use gocube::{gocube_connect, gocube_scanfilter_uuid};
+use moyu::{moyu_connect, moyu_scanfilter_uuid};
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
+use uuid::Uuid;
 
 #[cfg(target_os = "macos")]
 use btleplug::api::Manager as _;
@@ -132,19 +134,25 @@ impl BluetoothCube {
         let battery_copy = battery.clone();
         let listeners_copy = listeners.clone();
         let gyro_listeners_copy = gyro_listeners.clone();
-        let error_copy = error.clone();
-        std::thread::spawn( move || async {
-            // match 
-            Self::discovery_handler(
-                discovered_devices_copy,
-                to_connect_copy,
-                state_copy.clone(),
-                connected_device_copy,
-                connected_name_copy,
-                battery_copy,
-                listeners_copy,
-                gyro_listeners_copy,
-            ).await
+        // let error_copy = error.clone();
+        let builder = thread::Builder::new().name("discovery_handler".into());
+        let _ = builder.spawn(move || {
+            // std::thread::spawn(|| async move {
+            // match
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async {
+                Self::discovery_handler(
+                    discovered_devices_copy,
+                    to_connect_copy,
+                    state_copy.clone(),
+                    connected_device_copy,
+                    connected_name_copy,
+                    battery_copy,
+                    listeners_copy,
+                    gyro_listeners_copy,
+                )
+                .await;
+            });
             //  {
             //     Err(error) => {
             //         *state_copy.lock().unwrap() = BluetoothCubeState::Error;
@@ -187,16 +195,43 @@ impl BluetoothCube {
             Mutex<HashMap<MoveListenerHandle, Box<dyn Fn(&[TimedMove], &Cube3x3x3) + Send>>>,
         >,
         gyro_listeners: Arc<Mutex<HashMap<GyroListenerHandle, Box<dyn Fn(&[QGyroState]) + Send>>>>,
-    )  {
+    ) {
         let manager = Manager::new().await;
         let adapter = manager.unwrap().adapters().await.unwrap();
+        // let rt = tokio::runtime::Runtime::new().unwrap();
         let central = adapter
             .into_iter()
             .nth(0)
-            .ok_or_else(|| anyhow!("No Bluetooth adapters found")).unwrap();
-        central.start_scan(ScanFilter {
-            services: [uuid_from_u32(0)].to_vec(),
-        });
+            .ok_or_else(|| anyhow!("No Bluetooth adapters found"))
+            .unwrap();
+        // rt.block_on(async {
+        let _ = central
+            .start_scan(ScanFilter {
+                services: [
+                    gan_cube_scanfilter_uuid(),
+                    giiker_scanfilter_uuid(),
+                    gocube_scanfilter_uuid(),
+                    moyu_scanfilter_uuid(),
+                ].to_vec(),
+                //     // services: [uuid_from_u32(0)].to_vec(),
+                //     // services: [Uuid::from_u128(0)].to_vec(),
+                //     services: [Uuid::from_u128(0xffffffff_ffff_ffff_ffff_ffffffffffff)].to_vec(),
+            })
+            // .start_scan(ScanFilter::default())
+            .await;
+        // match central
+        //     .start_scan(ScanFilter {
+        //         services: [uuid_from_u32(0)].to_vec(),
+        //     })
+        //     .await
+        // {
+        //     Err(e) => {
+        //         println!("{:?}", anyhow!("Cube {}", e));
+        //         return ();
+        //     }
+        //     _ => (),
+        // }
+        // });
 
         loop {
             // See if the client asked to connect to a cube
@@ -342,7 +377,11 @@ impl BluetoothCube {
 
             // Enumerate devices
             let mut new_devices = Vec::new();
-            for device in central.peripherals().await.unwrap().into_iter() {
+            let peripherals = central.peripherals().await;
+            let p2 = peripherals.unwrap();
+            let iter = p2.into_iter();
+            // for device in central.peripherals().await.unwrap().into_iter() {
+            for device in iter {
                 if let Some(property) = device.properties().await.unwrap() {
                     let name = property.local_name.unwrap();
                     match BluetoothCubeType::from_name(&name) {
@@ -395,7 +434,9 @@ impl BluetoothCube {
             BluetoothCubeType::GAN => gan_cube_connect(peripheral, move_listener).await?,
             BluetoothCubeType::GoCube => gocube_connect(peripheral, move_listener).await?,
             BluetoothCubeType::Giiker => giiker_connect(peripheral, move_listener).await?,
-            BluetoothCubeType::MoYu => moyu_connect(peripheral, move_listener, gyro_listener)?,
+            BluetoothCubeType::MoYu => {
+                moyu_connect(peripheral, move_listener, gyro_listener).await?
+            }
         };
 
         init(cube.as_ref());

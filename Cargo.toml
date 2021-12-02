@@ -26,7 +26,8 @@ default = ["tpscube_core/native-storage", "tpscube_core/bluetooth"]
 wasm = ["getrandom/js", "tpscube_core/web-storage", "instant/wasm-bindgen", "chrono/wasmbind"]
 
 [profile.dev]
-opt-level = 2
+# opt-level = 2
+opt-level = 0
 
 [profile.release]
 panic = "abort"
