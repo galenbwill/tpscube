@@ -482,11 +482,11 @@ impl HistoryRegion for AllTimeBestRegion {
 
             let galley = ui
                 .fonts()
-                .layout_single_line(FontSize::Normal.into(), solve_time_string(average.time));
+                .layout_single_line(FontSize::Section.into(), solve_time_string(average.time));
             let rect = Rect::from_min_size(
                 Pos2::new(
                     x + layout_metrics.best_solve_width / 2.0 - galley.size.x / 2.0,
-                    y + ui.fonts().row_height(FontSize::Normal.into()),
+                    y + ui.fonts().row_height(FontSize::Section.into()),
                 ),
                 galley.size,
             );
@@ -510,11 +510,12 @@ impl HistoryRegion for AllTimeBestRegion {
             if let Some(average) = &self.running_last_ao50 {
                 let galley = ui
                     .fonts()
-                    .layout_single_line(FontSize::Normal.into(), solve_time_string(average.time));
+                    .layout_single_line(FontSize::Section.into(), solve_time_string(average.time));
                 let rect = Rect::from_min_size(
                     Pos2::new(
                         x + layout_metrics.best_solve_width / 2.0 - galley.size.x / 2.0,
-                        y + 2.0 * ui.fonts().row_height(FontSize::Normal.into()),
+                        y + ui.fonts().row_height(FontSize::Normal.into())
+                            + ui.fonts().row_height(FontSize::Section.into()),
                     ),
                     galley.size,
                 );
@@ -548,8 +549,8 @@ impl HistoryRegion for AllTimeBestRegion {
                     - BEST_TIME_COL_PADDING)
                     / 2.0;
             y += ui.fonts().row_height(FontSize::Normal.into())
-                + ui.fonts().row_height(FontSize::Normal.into())
-                + ui.fonts().row_height(FontSize::Normal.into())
+                // + ui.fonts().row_height(FontSize::Section.into())
+                + ui.fonts().row_height(FontSize::BestTime.into())
                 + BEST_TIME_ROW_PADDING;
         }
 
@@ -569,11 +570,11 @@ impl HistoryRegion for AllTimeBestRegion {
 
             let galley = ui
                 .fonts()
-                .layout_single_line(FontSize::Normal.into(), solve_time_string(average.time));
+                .layout_single_line(FontSize::Section.into(), solve_time_string(average.time));
             let rect = Rect::from_min_size(
                 Pos2::new(
                     x + layout_metrics.best_solve_width / 2.0 - galley.size.x / 2.0,
-                    y + ui.fonts().row_height(FontSize::Normal.into()),
+                    y + ui.fonts().row_height(FontSize::Section.into()),
                 ),
                 galley.size,
             );
@@ -597,11 +598,12 @@ impl HistoryRegion for AllTimeBestRegion {
             if let Some(average) = &self.running_last_ao100 {
                 let galley = ui
                     .fonts()
-                    .layout_single_line(FontSize::Normal.into(), solve_time_string(average.time));
+                    .layout_single_line(FontSize::Section.into(), solve_time_string(average.time));
                 let rect = Rect::from_min_size(
                     Pos2::new(
                         x + layout_metrics.best_solve_width / 2.0 - galley.size.x / 2.0,
-                        y + 2.0 * ui.fonts().row_height(FontSize::Normal.into()),
+                        y + ui.fonts().row_height(FontSize::Normal.into())
+                            + ui.fonts().row_height(FontSize::Section.into()),
                     ),
                     galley.size,
                 );
@@ -1346,12 +1348,12 @@ impl HistoryWidget {
             }
             println!("+all_solves({}) solves({})", all_solves.len(), solves.len());
             all_solves.extend_from_slice(solves.as_slice());
-            println!(
-                "=all_solves({}) solves({}): {}",
-                all_solves.len(),
-                solves.len(),
-                all_solves.as_slice().average_ignore_dnf().unwrap()
-            );
+            // println!(
+            //     "=all_solves({}) solves({}): {}",
+            //     all_solves.len(),
+            //     solves.len(),
+            //     all_solves.as_slice().average_ignore_dnf().unwrap()
+            // );
 
             let last_solve = solves.last().unwrap().clone();
 
