@@ -1,7 +1,8 @@
 [package]
+edition = "2018"
 name = "btletest"
 version = "0.1.0"
-edition = "2018"
 
 [dependencies]
-tpscube_core = { path = "../../lib", features = ["bluetooth"] }
+tokio = {version = "1.7", features = ["full"]}
+tpscube_core = {path = "../../lib", features = ["bluetooth"]}

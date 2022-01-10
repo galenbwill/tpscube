@@ -3,7 +3,8 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tpscube_core::{BluetoothCube, BluetoothCubeState};
 
-fn main() {
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
     let cube = BluetoothCube::new();
     let real_time_start: Mutex<Option<Instant>> = Mutex::new(None);
     let total_time = Mutex::new(0);

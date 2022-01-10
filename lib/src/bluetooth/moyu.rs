@@ -383,9 +383,9 @@ impl<P: Peripheral> BluetoothCubeDevice for MoYuCube<P> {
     }
 }
 
-pub(crate) fn moyu_scanfilter_uuid() -> Uuid {
+pub(crate) fn moyu_scanfilter_uuid() -> Vec<Uuid> {
     // Uuid::from_str("00001003-0000-1000-8000-00805f9b34fb").unwrap()
-    uuid_from_u32(0x1003)
+    [uuid_from_u32(0x1000), uuid_from_u32(0x1001), uuid_from_u32(0x1002), uuid_from_u32(0x1003)].to_vec()
 }
 
 pub(crate) async fn moyu_connect<P: Peripheral + 'static>(

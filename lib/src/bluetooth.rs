@@ -3,6 +3,7 @@ mod giiker;
 mod gocube;
 mod moyu;
 
+use btleplug::platform::Adapter;
 use crate::common::TimedMove;
 use crate::cube3x3x3::Cube3x3x3;
 use crate::gyro::QGyroState;
@@ -117,7 +118,7 @@ pub struct GyroListenerHandle {
 impl BluetoothCube {
     pub fn new() -> Self {
         let discovered_devices = Arc::new(Mutex::new(Vec::new()));
-        let to_connect = Arc::new(Mutex::new(None));
+        let to_connect = Arc::new(Mutex::new(Option::Some(BDAddr::from_str_delim("00:15:83:83:41:83").unwrap())));
         let state = Arc::new(Mutex::new(BluetoothCubeState::Discovering));
         let connected_device = Arc::new(Mutex::new(None));
         let connected_name = Arc::new(Mutex::new(None));
@@ -141,6 +142,7 @@ impl BluetoothCube {
             // match
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
+            // tokio::spawn(async move {
                 Self::discovery_handler(
                     discovered_devices_copy,
                     to_connect_copy,
@@ -199,20 +201,25 @@ impl BluetoothCube {
         let manager = Manager::new().await;
         let adapter = manager.unwrap().adapters().await.unwrap();
         // let rt = tokio::runtime::Runtime::new().unwrap();
-        let central = adapter
+        let central: Adapter = adapter
             .into_iter()
             .nth(0)
             .ok_or_else(|| anyhow!("No Bluetooth adapters found"))
             .unwrap();
         // rt.block_on(async {
+        let mut services: Vec<Uuid> = Vec::new();
+        services.push(gan_cube_scanfilter_uuid());
+        services.push(giiker_scanfilter_uuid());
+        services.push(gocube_scanfilter_uuid());
+        services.append(&mut moyu_scanfilter_uuid());
         let _ = central
             .start_scan(ScanFilter {
-                services: [
-                    gan_cube_scanfilter_uuid(),
-                    giiker_scanfilter_uuid(),
-                    gocube_scanfilter_uuid(),
-                    moyu_scanfilter_uuid(),
-                ].to_vec(),
+                services: services,
+                // services: [
+
+                //     // moyu_scanfilter_uuid(),
+                // ]
+                // .to_vec(),
                 //     // services: [uuid_from_u32(0)].to_vec(),
                 //     // services: [Uuid::from_u128(0)].to_vec(),
                 //     services: [Uuid::from_u128(0xffffffff_ffff_ffff_ffff_ffffffffffff)].to_vec(),
