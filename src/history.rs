@@ -49,6 +49,7 @@ struct SessionRegion {
     session_id: String,
     name: String,
     solves: Vec<Solve>,
+    has_moves: bool,
     last_solve: Solve,
     rows: usize,
     best_solve: Option<BestSolve>,
@@ -72,19 +73,24 @@ pub struct HistoryWidget {
     cached_update_id: Option<u64>,
     cached_best_columns: usize,
     cached_solve_columns: usize,
+    cached_solve_columns_moves: usize,
     cached_solve_type: SolveType,
 }
 
 struct SolveLayoutMetrics {
     solve_number_width: f32,
     solve_time_width: f32,
+    solve_time_moves_width: f32,
     solve_penalty_width: f32,
     solve_menu_width: f32,
     total_solve_width: f32,
+    total_solve_moves_width: f32,
     best_solve_width: f32,
     best_columns: usize,
     solve_columns: usize,
+    solve_columns_moves: usize,
     solve_content_width: f32,
+    solve_content_moves_width: f32,
 }
 
 impl HistoryRegion for NoSolvesRegion {
@@ -648,6 +654,11 @@ impl HistoryRegion for SessionRegion {
         // Layout best solve and average region to determine line wrapping
         let mut x = 0.0;
         let mut lines = 1;
+        let content_width = if self.has_moves {
+            layout_metrics.solve_content_moves_width
+        } else {
+            layout_metrics.solve_content_width
+        };
         if let Some(best_solve) = &self.best_solve {
             x += ui
                 .fonts()
@@ -673,7 +684,7 @@ impl HistoryRegion for SessionRegion {
                     .size
                     .x
                 + SESSION_BEST_PADDING;
-            if (x + width) > layout_metrics.solve_content_width {
+            if (x + width) > content_width {
                 x = 0.0;
                 lines += 1;
             }
@@ -691,7 +702,7 @@ impl HistoryRegion for SessionRegion {
                     .size
                     .x
                 + SESSION_BEST_PADDING;
-            if (x + width) > layout_metrics.solve_content_width {
+            if (x + width) > content_width {
                 x = 0.0;
                 lines += 1;
             }
@@ -709,7 +720,7 @@ impl HistoryRegion for SessionRegion {
                     .size
                     .x
                 + SESSION_BEST_PADDING;
-            if (x + width) > layout_metrics.solve_content_width {
+            if (x + width) > content_width {
                 x = 0.0;
                 lines += 1;
             }
@@ -727,7 +738,7 @@ impl HistoryRegion for SessionRegion {
                     .size
                     .x
                 + SESSION_BEST_PADDING;
-            if (x + width) > layout_metrics.solve_content_width {
+            if (x + width) > content_width {
                 x = 0.0;
                 lines += 1;
             }
@@ -744,7 +755,7 @@ impl HistoryRegion for SessionRegion {
                     .layout_single_line(FontSize::Normal.into(), solve_time_string(*average))
                     .size
                     .x;
-            if (x + width) > layout_metrics.solve_content_width {
+            if (x + width) > content_width {
                 lines += 1;
             }
         }
@@ -781,15 +792,24 @@ impl HistoryRegion for SessionRegion {
             None => (None, None, None, None, None),
         };
 
+        let content_width = if self.has_moves {
+            layout_metrics.solve_content_moves_width
+        } else {
+            layout_metrics.solve_content_width
+        };
+
+        let solve_columns = if self.has_moves {
+            layout_metrics.solve_columns_moves
+        } else {
+            layout_metrics.solve_columns
+        };
+        
         // Draw session background
-        let shaded_area = match layout_metrics.solve_columns {
+        let shaded_area = match solve_columns {
             1 => rect.shrink2(Vec2::new(REGION_PADDING, 0.0)),
             _ => Rect::from_center_size(
                 rect.center(),
-                Vec2::new(
-                    layout_metrics.solve_content_width + REGION_PADDING * 2.0,
-                    rect.height(),
-                ),
+                Vec2::new(content_width + REGION_PADDING * 2.0, rect.height()),
             ),
         };
         ui.painter()
@@ -835,11 +855,17 @@ impl HistoryRegion for SessionRegion {
         );
         y += SESSION_SEPARATOR_SIZE;
 
+        let total_solve_width = if self.has_moves {
+            layout_metrics.total_solve_moves_width
+        } else {
+            layout_metrics.total_solve_width
+        };
+
         // Draw solves
-        let col_width = layout_metrics.total_solve_width + SESSION_SEPARATOR_SIZE;
+        let col_width = total_solve_width + SESSION_SEPARATOR_SIZE;
         let row_height = ui.fonts().row_height(FontSize::Normal.into());
         let mut i = 0;
-        for col in 0..layout_metrics.solve_columns {
+        for col in 0..solve_columns {
             if i >= self.solves.len() {
                 break;
             }
@@ -882,7 +908,7 @@ impl HistoryRegion for SessionRegion {
                         content_area.left()
                             + col as f32 * col_width
                             + layout_metrics.solve_number_width
-                            + layout_metrics.solve_time_width
+                            + if self.has_moves { layout_metrics.solve_time_moves_width } else { layout_metrics.solve_time_width }
                             - galley.size.x,
                         y + row as f32 * row_height,
                     ),
@@ -967,7 +993,7 @@ impl HistoryRegion for SessionRegion {
                         content_area.left()
                             + col as f32 * col_width
                             + layout_metrics.solve_number_width
-                            + layout_metrics.solve_time_width
+                            + if self.has_moves { layout_metrics.solve_time_moves_width } else { layout_metrics.solve_time_width }
                             + layout_metrics.solve_penalty_width,
                         y + row as f32 * row_height
                             + ui.fonts().row_height(FontSize::Normal.into())
@@ -1075,7 +1101,7 @@ impl HistoryRegion for SessionRegion {
             // Draw column separator
             let x = content_area.left()
                 + col as f32 * col_width
-                + layout_metrics.total_solve_width
+                + total_solve_width
                 + SESSION_SEPARATOR_SIZE / 2.0;
             ui.painter().line_segment(
                 [
@@ -1105,7 +1131,7 @@ impl HistoryRegion for SessionRegion {
 
         // Draw best solve
         let mut x = content_area.left();
-        let max_x = x + layout_metrics.solve_content_width;
+        let max_x = x + content_width;
         if let Some(best_solve) = &self.best_solve {
             let galley = ui
                 .fonts()
@@ -1337,6 +1363,7 @@ impl HistoryWidget {
             cached_update_id: None,
             cached_best_columns: 0,
             cached_solve_columns: 0,
+            cached_solve_columns_moves: 0,
             cached_solve_type: SolveType::Standard3x3x3,
         }
     }
@@ -1359,6 +1386,10 @@ impl HistoryWidget {
         let mut all_solves: Vec<Solve> = Vec::new();
         for session in history.sessions().values() {
             let solves: Vec<Solve> = session.to_vec(history);
+            let has_moves = solves
+                .as_slice()
+                .into_iter()
+                .any(|s| s.moves.is_some() && s.moves.as_ref().unwrap().len() > 0);
             if solves.len() == 0 {
                 // Skip empty sessions
                 continue;
@@ -1435,8 +1466,12 @@ impl HistoryWidget {
             }
 
             // Calculate number of rows based on number of columns
-            let rows =
-                (solves.len() + layout_metrics.solve_columns - 1) / layout_metrics.solve_columns;
+            let rows = if has_moves {
+                (solves.len() + layout_metrics.solve_columns_moves - 1)
+                    / layout_metrics.solve_columns_moves
+            } else {
+                (solves.len() + layout_metrics.solve_columns - 1) / layout_metrics.solve_columns
+            };
 
             // Construct session title
             let name = match session.name() {
@@ -1449,6 +1484,7 @@ impl HistoryWidget {
                 session_id: session.id().into(),
                 name,
                 solves,
+                has_moves,
                 last_solve,
                 rows,
                 best_solve,
@@ -1526,9 +1562,12 @@ impl HistoryWidget {
             let number_galley = ui
                 .fonts()
                 .layout_single_line(FontSize::Normal.into(), "9999.".into());
-            let solve_time_galley = ui
+            let solve_time_moves_galley = ui
                 .fonts()
                 .layout_single_line(FontSize::Normal.into(), "9:59.99 (999/9.9)".into());
+            let solve_time_galley = ui
+                .fonts()
+                .layout_single_line(FontSize::Normal.into(), "9:59.99".into());
             let solve_penalty_galley = ui
                 .fonts()
                 .layout_single_line(FontSize::Small.into(), " (+2) ".into());
@@ -1542,11 +1581,18 @@ impl HistoryWidget {
                 + solve_time_galley.size.x
                 + solve_penalty_galley.size.x
                 + solve_menu_galley.size.x;
+            let total_solve_moves_width = number_galley.size.x
+                + solve_time_moves_galley.size.x
+                + solve_penalty_galley.size.x
+                + solve_menu_galley.size.x;
 
             let max_session_width =
                 ui.max_rect().width() - REGION_PADDING * 2.0 - SESSION_REGION_BORDER * 2.0;
             let solve_columns =
                 1.max((max_session_width / (total_solve_width + SESSION_SEPARATOR_SIZE)) as usize);
+            let solve_columns_moves = 1.max(
+                (max_session_width / (total_solve_moves_width + SESSION_SEPARATOR_SIZE)) as usize,
+            );
             let best_columns = 1.max(
                 (ui.max_rect().width() / (best_time_galley.size.x + BEST_TIME_COL_PADDING))
                     as usize,
@@ -1555,24 +1601,32 @@ impl HistoryWidget {
             let solve_layout_metrics = SolveLayoutMetrics {
                 solve_number_width: number_galley.size.x,
                 solve_time_width: solve_time_galley.size.x,
+                solve_time_moves_width: solve_time_moves_galley.size.x,
                 solve_penalty_width: solve_penalty_galley.size.x,
                 solve_menu_width: solve_menu_galley.size.x,
                 total_solve_width,
+                total_solve_moves_width,
                 best_solve_width: best_time_galley.size.x,
                 best_columns,
                 solve_columns,
+                solve_columns_moves,
                 solve_content_width: (solve_columns as f32
                     * (total_solve_width + SESSION_SEPARATOR_SIZE))
+                    - SESSION_SEPARATOR_SIZE,
+                solve_content_moves_width: (solve_columns_moves as f32
+                    * (total_solve_moves_width + SESSION_SEPARATOR_SIZE))
                     - SESSION_SEPARATOR_SIZE,
             };
 
             if self.cached_update_id != Some(history.update_id())
                 || self.cached_solve_columns != solve_columns
+                || self.cached_solve_columns_moves != solve_columns_moves
                 || self.cached_best_columns != best_columns
                 || self.cached_solve_type != solve_type
             {
                 self.cached_update_id = Some(history.update_id());
                 self.cached_solve_columns = solve_columns;
+                self.cached_solve_columns_moves = solve_columns_moves;
                 self.cached_best_columns = best_columns;
                 self.cached_solve_type = solve_type;
                 self.generate_regions(ui, &solve_layout_metrics, history, solve_type);
