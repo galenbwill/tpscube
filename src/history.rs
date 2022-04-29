@@ -90,25 +90,25 @@ struct SolveLayoutMetrics {
     solve_content_width: f32,
 }
 
-pub trait Max<'a, Rhs = Self> {
+pub trait Max<Rhs = Self> {
     type Output;
-    fn max(self, rhs: &'a Rhs) -> Self::Output;
+    fn max(self, rhs: Rhs) -> Self::Output;
 }
 
-impl<'a> Max<'a, f32> for f32 {
+impl Max<f32> for f32 {
     type Output = f32;
-    fn max(self, rhs: &'a f32) -> f32 {
-        if self > *rhs {
+    fn max(self, rhs: f32) -> f32 {
+        if self > rhs {
             self
         } else {
-            *rhs
+            rhs
         }
     }
 }
 
-impl<'a> Max<'a, SolveLayoutMetrics> for SolveLayoutMetrics {
+impl Max<SolveLayoutMetrics> for SolveLayoutMetrics {
     type Output = SolveLayoutMetrics;
-    fn max(self, rhs: &SolveLayoutMetrics) -> SolveLayoutMetrics {
+    fn max(self, rhs: SolveLayoutMetrics) -> SolveLayoutMetrics {
         SolveLayoutMetrics {
             solve_number_width: self.solve_number_width.max(rhs.solve_number_width),
             solve_time_width: self.solve_time_width.max(rhs.solve_time_width),
@@ -809,7 +809,7 @@ impl HistoryRegion for SessionRegion {
             layout_metrics
         };
 
-        let layout_metrics = layout_metrics.max(&*layout_metrics_moves);
+        let layout_metrics = layout_metrics.max(*layout_metrics_moves);
 
         let (
             all_time_best_solve,
