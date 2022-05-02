@@ -18,6 +18,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use uuid::Uuid;
 
+use pretty_hex::*;
+extern crate difference;
+use difference::*;
+
 struct GANCubeVersion1Characteristics {
     version: Characteristic,
     hardware: Characteristic,
@@ -51,6 +55,7 @@ struct GANCubeVersion2<P: Peripheral + 'static> {
     synced: Arc<Mutex<bool>>,
     write: Characteristic,
     cipher: GANCubeVersion2Cipher,
+    gyro: Arc<Mutex<Option<Vec<u8>>>>,
 }
 
 #[derive(Clone)]
@@ -363,7 +368,8 @@ impl GANCubeVersion1Cipher {
     }
 }
 
-impl<P: Peripheral> GANCubeVersion2<P> {
+impl<P: 'static + Peripheral> GANCubeVersion2<P> {
+    const CUBE_GYRO_MESSAGE: u8 = 1;
     const CUBE_MOVES_MESSAGE: u8 = 2;
     const CUBE_STATE_MESSAGE: u8 = 4;
     const BATTERY_STATE_MESSAGE: u8 = 9;
@@ -417,6 +423,7 @@ impl<P: Peripheral> GANCubeVersion2<P> {
         let battery_charging = Arc::new(Mutex::new(None));
         let last_move_count = Mutex::new(None);
         let synced = Arc::new(Mutex::new(true));
+        let gyro: Arc<Mutex<Option<Vec<u8>>>> = Arc::new(Mutex::new(None));
 
         let cipher_copy = cipher.clone();
         let state_copy = state.clone();
@@ -424,6 +431,7 @@ impl<P: Peripheral> GANCubeVersion2<P> {
         let battery_percentage_copy = battery_percentage.clone();
         let battery_charging_copy = battery_charging.clone();
         let synced_copy = synced.clone();
+        let gyro_copy = gyro.clone();
 
         device.on_notification(Box::new(move |value| {
             if let Ok(value) = cipher_copy.decrypt(&value.value) {
@@ -583,6 +591,80 @@ impl<P: Peripheral> GANCubeVersion2<P> {
                         *battery_percentage_copy.lock().unwrap() =
                             Some(Self::extract_bits(&value, 8, 8));
                     }
+                    Self::CUBE_GYRO_MESSAGE => {
+                        println!("\ngan: some other {:#b}\n{:?}", message_type, &value.hex_dump());
+                        print!("\nFlo: {:>.5} ",f64::from_bits(Self::extract_bits(&value, 4 + 0 * 64, 64) as u64));
+                        print!("{:>.5}\n", f64::from_bits(Self::extract_bits(&value, 4 + 1 * 64, 64) as u64));
+                        print!("\nFlo: {:>.5} ",f64::from_bits(u64::from_be(Self::extract_bits(&value, 4 + 0 * 64, 64) as u64)));
+                        print!("{:>.5}\n", f64::from_bits(u64::from_be(Self::extract_bits(&value, 4 + 1 * 64, 64) as u64)));
+                        print!("\nFlo: {:>.5} ",f32::from_bits(Self::extract_bits(&value, 4 + 0 * 32, 32) as u32));
+                        print!("{:>.5} ", f32::from_bits(Self::extract_bits(&value, 4 + 1 * 32, 32) as u32));
+                        print!("{:>.5} ", f32::from_bits(Self::extract_bits(&value, 4 + 2 * 32, 32) as u32));
+                        print!("{:>.5}\n", f32::from_bits(Self::extract_bits(&value, 4 + 3 * 32, 32) as u32));
+                        print!("\nFlo: {:>.5} ",f32::from_bits(u32::from_be(Self::extract_bits(&value, 4 + 0 * 32, 32) as u32)));
+                        print!("{:>.5} ", f32::from_bits(u32::from_be(Self::extract_bits(&value, 4 + 1 * 32, 32) as u32)));
+                        print!("{:>.5} ", f32::from_bits(u32::from_be(Self::extract_bits(&value, 4 + 2 * 32, 32) as u32)));
+                        print!("{:>.5}\n", f32::from_bits(u32::from_be(Self::extract_bits(&value, 4 + 3 * 32, 32) as u32)));
+                        // println!("{:}", f32::from_bits(Self::extract_bits(&value, 4 * 32, 32) as u32));
+                        // println!("\n{:}", f64::from_bits(Self::extract_bits64(&value, 0 * 64, 64) as u64));
+                        // println!("{:}", f64::from_bits(Self::extract_bits64(&value, 1 * 64, 64) as u64));
+                        // println!("\n{:}", f64::from_bits(Self::extract_bits64(&value, 32 + 0 * 64, 64) as u64));
+                        // println!("{:}", f64::from_bits(Self::extract_bits64(&value, 32 + 1 * 64, 64) as u64));
+                        print!("Hex: ");
+                        for i in 0..10 {
+                            let s = 16;
+                            print!(" {:04x} ",Self::extract_bits(&value, i * s, s) as u32);
+                        }
+                        println!("");
+                        // println!("u16: {}", Self::format_bits(&value, 16, 20));
+
+                        let mut last_gyro_option = gyro_copy.lock().unwrap();
+                        if let Some(last_gyro) = &*last_gyro_option {
+                            for bits in [4, 8, 16] {
+                                    for start in [0, 4] {
+                                    let ref last_gyro_str = Self::format_bits(&last_gyro, start, bits, 20).clone();
+                                    let ref curr_gyro_str = Self::format_bits(&value, start, bits, 20).clone();
+                                    // println!("\nOld: {}", last_gyro_str.clone());
+                                    // println!("Cur: {}", curr_gyro_str.clone());
+                                    // print!("Del: ");
+                                    // print_diff(last_gyro_str, curr_gyro_str, " ");
+                                    let changeset = Changeset::new(last_gyro_str, curr_gyro_str, " ");
+                                    let mut result = [String::new(), String::new()];
+                                    for d in &changeset.diffs {
+                                        match *d {
+                                            Difference::Same(ref x) => {
+                                                result[0] = format!("{}{}{}", result[0], x, changeset.split);
+                                                result[1] = format!("{}{}{}", result[1], x, changeset.split);
+                                            }
+                                            Difference::Add(ref x) => {
+                                                result[1] = format!("{}\x1b[92m{}\x1b[0m{}", result[1], x, changeset.split);
+                                            }
+                                            Difference::Rem(ref x) => {
+                                                result[0] = format!("{}\x1b[91m{}\x1b[0m{}", result[0], x, changeset.split);
+                                            }
+                                        }
+                                    }
+                                    
+                                    // println!("Del: {}", changeset);
+                                    println!("\nOld: {}\nCur: {}", result[0], result[1]);
+                                }
+                            }
+                            // let ref last_gyro_str = Self::format_bits(&last_gyro, 4, 20).clone();
+                            // let ref curr_gyro_str = Self::format_bits(&value, 4, 20).clone();
+                            // println!("Old: {}", last_gyro_str.clone());
+                            // println!("Cur: {}", curr_gyro_str.clone());
+                            // // print!("Del: ");
+                            // // print_diff(last_gyro_str, curr_gyro_str, " ");
+                            // let changeset = Changeset::new(last_gyro_str, curr_gyro_str, " ");
+                            // println!("Del: {}", changeset);
+                        } else {
+                            println!("Dec: {}", Self::format_bits(&value, 0, 4, 20));
+                        }
+                        
+                        // *last_gyro_option.lock().unwrap() =
+                        *last_gyro_option =
+                            Some(value.clone());
+                    }
                     _ => (),
                 }
             }
@@ -623,6 +705,7 @@ impl<P: Peripheral> GANCubeVersion2<P> {
             synced,
             cipher,
             write,
+            gyro,
         })
     }
 
@@ -636,6 +719,31 @@ impl<P: Peripheral> GANCubeVersion2<P> {
             }
         }
         result
+    }
+    fn extract_bits64(data: &[u8], start: usize, count: usize) -> u64 {
+        let mut result = 0;
+        for i in 0..count {
+            let bit = start + i;
+            result <<= 1;
+            if data[bit / 8] & (1 << (7 - (bit % 8))) != 0 {
+                result |= 1;
+            }
+        }
+        result
+    }
+    fn format_bits(data: &[u8], start: usize, size: usize, count: usize) -> String {
+        let mut result = String::new();
+        for i in 0..((count * 8) / size) {
+            // let mut size = size;
+            let offset = start + i * size;
+            if offset + size > (count * 8) {
+                // size -= (offset - count * size);
+                break;
+            }
+            let bits = Self::extract_bits64(&data, offset, size);
+            result = format!("{}{:>width$} ", result, bits, width = size/2+1 as usize);
+        }
+        return result;
     }
 }
 
