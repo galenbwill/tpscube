@@ -28,8 +28,9 @@ const ANALYSIS_MIN_PADDING: f32 = 24.0;
 const ANALYSIS_MAX_PADDING: f32 = 64.0;
 const MAX_ANALYSIS_WIDTH: f32 = 360.0;
 
-const LARGE_MIN_MEGAMINX_SCRAMBLE_WIDTH: f32 = 430.0;
-const NORMAL_MIN_MEGAMINX_SCRAMBLE_WIDTH: f32 = 360.0;
+// const LARGE_MIN_MEGAMINX_SCRAMBLE_WIDTH: f32 = 750.0;
+const LARGE_MIN_MEGAMINX_SCRAMBLE_WIDTH: f32 = 14.0 * (10.0 * (3.0 + 2.0) + 2.0 + 2.0);
+const NORMAL_MIN_MEGAMINX_SCRAMBLE_WIDTH: f32 = 400.0;
 
 pub struct TimerCube {
     current_scramble: Vec<Move>,
@@ -592,9 +593,9 @@ impl TimerCube {
         } else if self.solve_type == SolveType::Megaminx
             && rect.width() < LARGE_MIN_MEGAMINX_SCRAMBLE_WIDTH
         {
-            FontSize::Normal
-        } else if self.displayed_scramble.len() > 25 {
             FontSize::Section
+        } else if self.displayed_scramble.len() > 25 {
+            FontSize::Scramble
         } else {
             FontSize::Scramble
         };
