@@ -1,13 +1,15 @@
 use super::{
-    Algorithm, AlgorithmCounts, AlgorithmStats, AlgorithmType, Sort, SortColumn, SortOrder,
+    Algorithm, AlgorithmCounts, AlgorithmStats, AlgorithmType, Sort, SortColumn, SortOrder, AlgorithmMode, AlgorithmsWidget,
 };
 use egui::Ui;
+use tpscube_core::OLLAlgorithm;
 
 const REQUIRED_COUNT: usize = 10;
 
 pub(super) struct TPSReport<'a> {
     rows: Vec<AlgorithmRow>,
     sort: &'a mut Sort,
+    mode: &'a mut Option<Box<AlgorithmMode>>,
 }
 
 struct AlgorithmRow {
@@ -21,7 +23,9 @@ struct AlgorithmRow {
 }
 
 impl<'a> TPSReport<'a> {
-    pub fn new(stats: &'a AlgorithmStats, alg_type: AlgorithmType, sort: &'a mut Sort) -> Self {
+    pub fn new(stats: &'a AlgorithmStats, alg_type: AlgorithmType, sort: &'a mut Sort,
+    mode: &'a mut Option<Box<AlgorithmMode>>) -> Self {
+    // mode: &'a mut AlgorithmsWidget) -> Self {
         // Gather algorithm data for each algorithm
         let mut rows = Vec::new();
         match alg_type {
@@ -65,15 +69,23 @@ impl<'a> TPSReport<'a> {
             }
         });
 
-        Self { rows, sort }
+        Self { rows, sort, mode }
     }
 
     pub fn update(&self, ui: &mut Ui) {
         ui.vertical(|ui| {
             for row in &self.rows {
-                ui.label(format!(
+                let text = match row.algorithm {
+                    Algorithm::OLL(oll) => match oll {
+                        OLLAlgorithm::OLL(_) => oll.to_string(),
+                        _ => format!("{} (#{})", oll.to_string(), oll.as_number()),
+                    },
+                    _ => row.algorithm.to_string(),
+                };
+                if ui
+                    .label(format!(
                     "{}: count {} recog {:.2} exec {:.2} total {:.2} moves {:.1} tps {:.2} etps {:.2}",
-                    row.algorithm.to_string(),
+                    text,
                     row.count,
                     row.recognition_time,
                     row.execution_time,
@@ -81,7 +93,16 @@ impl<'a> TPSReport<'a> {
                     row.moves,
                     row.tps,
                     row.execution_tps
-                ));
+                ))
+                .clicked()
+                {
+                    if let Some(mut mode) = self.mode.clone() {
+                        *mode = match row.algorithm {
+                            Algorithm::OLL(_) => AlgorithmMode::Algorithms(AlgorithmType::OLL),
+                            Algorithm::PLL(_) => AlgorithmMode::Algorithms(AlgorithmType::PLL),
+                        }
+                    }
+                }
             }
         });
     }

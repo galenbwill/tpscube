@@ -22,7 +22,7 @@ use tpscube_core::{
 pub struct AlgorithmsWidget {
     cached_update_id: Option<u64>,
     algorithm_stats: AlgorithmStats,
-    mode: AlgorithmMode,
+    mode: Option<Box<AlgorithmMode>>,
     sort: Sort,
 }
 
@@ -73,7 +73,7 @@ impl AlgorithmsWidget {
                 oll: HashMap::new(),
                 pll: HashMap::new(),
             },
-            mode: AlgorithmMode::Algorithms(AlgorithmType::OLL),
+            mode: Some(Box::new(AlgorithmMode::Algorithms(AlgorithmType::OLL))),
             sort: Sort {
                 column: SortColumn::TPS,
                 order: SortOrder::Descending,
@@ -127,21 +127,29 @@ impl AlgorithmsWidget {
         if ui
             .mode_label(
                 "OLL",
-                self.mode == AlgorithmMode::Algorithms(AlgorithmType::OLL),
+                if let Some(mode) = &self.mode {
+                    **mode == AlgorithmMode::Algorithms(AlgorithmType::OLL)
+                } else {
+                    false
+                },
             )
             .clicked()
         {
-            self.mode = AlgorithmMode::Algorithms(AlgorithmType::OLL);
+            self.mode = Some(Box::new(AlgorithmMode::Algorithms(AlgorithmType::OLL)));
         }
 
         if ui
             .mode_label(
                 "PLL",
-                self.mode == AlgorithmMode::Algorithms(AlgorithmType::PLL),
+                if let Some(mode) = &self.mode {
+                    **mode == AlgorithmMode::Algorithms(AlgorithmType::PLL)
+                } else {
+                    false
+                },
             )
             .clicked()
         {
-            self.mode = AlgorithmMode::Algorithms(AlgorithmType::PLL);
+            self.mode = Some(Box::new(AlgorithmMode::Algorithms(AlgorithmType::PLL)));
         }
     }
 
@@ -149,21 +157,29 @@ impl AlgorithmsWidget {
         if ui
             .mode_label(
                 "OLL",
-                self.mode == AlgorithmMode::TPSReport(AlgorithmType::OLL),
+                if let Some(mode) = &self.mode {
+                    **mode == AlgorithmMode::TPSReport(AlgorithmType::OLL)
+                } else {
+                    false
+                },
             )
             .clicked()
         {
-            self.mode = AlgorithmMode::TPSReport(AlgorithmType::OLL);
+            self.mode = Some(Box::new(AlgorithmMode::TPSReport(AlgorithmType::OLL)));
         }
 
         if ui
             .mode_label(
                 "PLL",
-                self.mode == AlgorithmMode::TPSReport(AlgorithmType::PLL),
+                if let Some(mode) = &self.mode {
+                    **mode == AlgorithmMode::TPSReport(AlgorithmType::PLL)
+                } else {
+                    false
+                },
             )
             .clicked()
         {
-            self.mode = AlgorithmMode::TPSReport(AlgorithmType::PLL);
+            self.mode = Some(Box::new(AlgorithmMode::TPSReport(AlgorithmType::PLL)));
         }
     }
 
@@ -242,13 +258,19 @@ impl AlgorithmsWidget {
         }
 
         ctxt.set_visuals(content_visuals());
-        CentralPanel::default().show(ctxt, |ui| match self.mode {
+        let mode = self.mode.clone();
+        CentralPanel::default().show(ctxt, |ui| match *mode.unwrap() {
             AlgorithmMode::Algorithms(alg_type) => {
                 let list = AlgorithmList::new(alg_type);
                 list.update(ui);
             }
             AlgorithmMode::TPSReport(alg_type) => {
-                let report = TPSReport::new(&self.algorithm_stats, alg_type, &mut self.sort);
+                let report = TPSReport::new(
+                    &self.algorithm_stats,
+                    alg_type,
+                    &mut self.sort,
+                    &mut self.mode,
+                );
                 report.update(ui);
             }
         });
