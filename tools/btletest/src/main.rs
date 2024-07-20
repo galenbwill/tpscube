@@ -1,34 +1,41 @@
 use std::ops::Deref;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tpscube_core::{BluetoothCube, BluetoothCubeState};
+use tpscube_core::{BluetoothCube, BluetoothCubeState,BluetoothCubeEvent};
 
 fn main() {
     let cube = BluetoothCube::new();
     let real_time_start: Mutex<Option<Instant>> = Mutex::new(None);
     let total_time = Mutex::new(0);
     loop {
+        for device in cube.available_devices().unwrap().iter() {
+            println!("Device: {:?}", device);
+        }
         if let Some(device) = cube.available_devices().unwrap().iter().next() {
-            cube.register_move_listener(move |moves, _state| {
-                let mut total_time = total_time.lock().unwrap();
-                let mut real_time_start = real_time_start.lock().unwrap();
-                if let Some(real_time_start) = real_time_start.deref() {
-                    let elapsed = Instant::now() - *real_time_start;
-                    for mv in moves {
-                        *total_time += mv.time();
-                        println!(
-                            "Move {}@{}  received at {}",
-                            mv.move_().to_string(),
-                            *total_time,
-                            elapsed.as_millis()
-                        );
-                    }
-                } else {
-                    *real_time_start = Some(Instant::now());
-                    for mv in moves {
-                        println!("Move {}  (initial)", mv.move_().to_string());
+            // cube.register_move_listener(move |moves, _state| {
+            cube.register_move_listener(move |event: BluetoothCubeEvent| match event {
+                BluetoothCubeEvent::Move(moves, _state) => {
+                    let mut total_time = total_time.lock().unwrap();
+                    let mut real_time_start = real_time_start.lock().unwrap();
+                    if let Some(real_time_start) = real_time_start.deref() {
+                        let elapsed = Instant::now() - *real_time_start;
+                        for mv in moves {
+                            *total_time += mv.time();
+                            println!(
+                                "Move {}@{}  received at {}",
+                                mv.move_().to_string(),
+                                *total_time,
+                                elapsed.as_millis()
+                            );
+                        }
+                    } else {
+                        *real_time_start = Some(Instant::now());
+                        for mv in moves {
+                            println!("Move {}  (initial)", mv.move_().to_string());
+                        }
                     }
                 }
+                _ => (),
             });
             println!("Connecting to {:?}", device);
             cube.connect(device.address).unwrap();

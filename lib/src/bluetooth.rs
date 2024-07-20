@@ -1,4 +1,5 @@
 mod gan;
+mod moyu_wcu;
 mod giiker;
 mod gocube;
 mod moyu;
@@ -11,6 +12,7 @@ use gan::gan_cube_connect;
 use giiker::giiker_connect;
 use gocube::gocube_connect;
 use moyu::moyu_connect;
+use moyu_wcu::moyu_wcu_cube_connect;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -57,6 +59,7 @@ pub enum BluetoothCubeType {
     GoCube,
     Giiker,
     MoYu,
+    MoYuWCU,
 }
 
 impl BluetoothCubeType {
@@ -69,6 +72,8 @@ impl BluetoothCubeType {
             Some(BluetoothCubeType::Giiker)
         } else if name.starts_with("MHC-") {
             Some(BluetoothCubeType::MoYu)
+        } else if name.starts_with("WCU") {
+            Some(BluetoothCubeType::MoYuWCU)
         } else {
             None
         }
@@ -183,6 +188,14 @@ impl BluetoothCube {
             let to_connect = to_connect.lock().unwrap().clone();
             if let Some(to_connect) = to_connect {
                 // Look for the cube in the device list to get the Peripheral object
+                // for device in central.peripherals() {
+                //     println!(
+                //         "Scan checking {:?}\n\t{:?}\n\t{:?}",
+                //         device.address(),
+                //         device.characteristics(),
+                //         device.properties()
+                //     );
+                // }
                 for device in central.peripherals() {
                     if to_connect == device.address() {
                         let listeners_copy = listeners.clone();
@@ -345,6 +358,7 @@ impl BluetoothCube {
                 if let Some(name) = device.properties().local_name {
                     match BluetoothCubeType::from_name(&name) {
                         Some(cube_type) => {
+                            println!("BluetoothCubeType: {:?} {:?}", cube_type, name);
                             new_devices.push(AvailableDevice {
                                 address: device.address(),
                                 name: name.clone(),
@@ -393,6 +407,8 @@ impl BluetoothCube {
             BluetoothCubeType::GoCube => gocube_connect(peripheral, move_listener)?,
             BluetoothCubeType::Giiker => giiker_connect(peripheral, move_listener)?,
             BluetoothCubeType::MoYu => moyu_connect(peripheral, move_listener)?,
+            BluetoothCubeType::MoYuWCU => moyu_wcu_cube_connect(peripheral, move_listener)?,
+            
         };
 
         init(cube.as_ref());
