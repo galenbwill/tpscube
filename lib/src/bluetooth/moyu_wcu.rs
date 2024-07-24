@@ -639,9 +639,9 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                             }
                             let corner = s;
                             // print!("corner[{}]: {}; ", i, &corner);
-                            if i == 3 {
-                                print!("\n");
-                            }
+                            // if i == 3 {
+                            //     print!("\n");
+                            // }
                             let corner = Corner::from_str(&corner).unwrap();
                             vcorners.push(corner);
                             corners[i] = corner as u32;
