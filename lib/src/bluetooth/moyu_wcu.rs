@@ -21,7 +21,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use uuid::Uuid;
 
-
 struct WCUCubeVersion1Characteristics {
     version: Characteristic,
     hardware: Characteristic,
@@ -78,12 +77,12 @@ impl<P: Peripheral> WCUCubeVersion1<P> {
         minor_version: u8,
     ) -> Result<Self> {
         // Read device identifier, this is used to derive the key
-        println!("reading device id...");
+        // println!("reading device id...");
         let device_id = device.read(&characteristics.hardware)?;
         if device_id.len() < 6 {
             return Err(anyhow!("Device identifier invalid"));
         }
-        println!("device_id: {:?}", device_id);
+        // println!("device_id: {:?}", device_id);
 
         // Derive the key
         const WCU_V1_KEYS: [[u8; 16]; 2] = [
@@ -103,12 +102,12 @@ impl<P: Peripheral> WCUCubeVersion1<P> {
         let cipher = WCUCubeVersion1Cipher { device_key: key };
 
         // Get initial cube state
-        println!("reading initial cube state...");
+        // println!("reading initial cube state...");
         let state = device.read(&characteristics.cube_state)?;
-        println!(
-            "characteristics.cube_state {:?}",
-            characteristics.cube_state
-        );
+        // println!(
+        //     "characteristics.cube_state {:?}",
+        //     characteristics.cube_state
+        // );
         if state.len() < 18 {
             return Err(anyhow!("Cube state is invalid"));
         }
@@ -425,11 +424,11 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
             .map(|i| u8::from_str_radix(&mac[i..i + 2], 16))
             .collect();
         let device_key = mac_data.ok().unwrap();
-        println!("properties: {:?}", device.properties());
-        println!(
-            "getting device key... from {:?}",
-            device.properties().manufacturer_data.get(&0)
-        );
+        // println!("properties: {:?}", device.properties());
+        // println!(
+        //     "getting device key... from {:?}",
+        //     device.properties().manufacturer_data.get(&0)
+        // );
         // let device_key: [u8; 6] = mac_data;
         // let device_key: [u8; 6] = if let Some(data) = device.properties().manufacturer_data.get(&0)
         // let device_key: [u8; 6] = if let Some(data) = device.properties().local_name {
@@ -450,7 +449,7 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
         // } else {
         //     return Err(anyhow!("Manufacturer data missing device identifier"));
         // };
-        println!("device_key: {:?}", device_key);
+        // println!("device_key: {:?}", device_key);
 
         const WCU_V2_KEY: [u8; 16] = [
             0x15, 0x77, 0x3a, 0x5c, 0x67, 0xe, 0x2d, 0x1f, 0x17, 0x67, 0x2a, 0x13, 0x9b, 0x67,
@@ -497,15 +496,15 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                         // println!("rx: CUBE_GYRO_MESSAGE");
                     }
                     Self::CUBE_INFO_MESSAGE => {
-                        println!("rx: CUBE_INFO_MESSAGE");
-                        println!("decrypted: {:?}", value);
+                        // println!("rx: CUBE_INFO_MESSAGE");
+                        // println!("decrypted: {:?}", value);
                     }
                     Self::CUBE_MOVES_MESSAGE => {
-                        println!("rx: CUBE_MOVES_MESSAGE");
-                        println!("decrypted: {:?}", value);
+                        // println!("rx: CUBE_MOVES_MESSAGE");
+                        // println!("decrypted: {:?}", value);
                         let current_move_count = Self::extract_bits(&value, 88, 8) as u8;
 
-                        println!("current_move_count: {}", current_move_count);
+                        // println!("current_move_count: {}", current_move_count);
                         // If we haven't received a cube state message yet, we can't know what
                         // the curent cube state is. Ignore moves until the cube state message
                         // is received. If there has been a cube state message, we will have
@@ -515,8 +514,8 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                             // Check number of moves since last message.
                             let move_count =
                                 current_move_count.wrapping_sub(last_move_count) as usize;
-                            println!("last_move_count: {}", last_move_count);
-                            println!("move_count: {}", move_count);
+                            // println!("last_move_count: {}", last_move_count);
+                            // println!("move_count: {}", move_count);
                             if move_count > 7 {
                                 // There are too many moves since the last message. Our cube
                                 // state is out of sync. Let the client know and reset the
@@ -567,7 +566,7 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
 
                             *last_move_count_option = Some(current_move_count);
 
-                            println!("moves: {:?}", moves.clone());
+                            // println!("moves: {:?}", moves.clone());
 
                             if moves.len() != 0 {
                                 // Let clients know there is a new move
@@ -580,8 +579,8 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                         }
                     }
                     Self::CUBE_STATE_MESSAGE => {
-                        println!("rx: CUBE_STATE_MESSAGE");
-                        println!("decrypted: {:?}", value);
+                        // println!("rx: CUBE_STATE_MESSAGE");
+                        // println!("decrypted: {:?}", value);
                         *last_move_count.lock().unwrap() =
                             Some(Self::extract_bits(&value, 152, 8) as u8);
                         let latest_facelet = &value[1..20];
@@ -597,7 +596,8 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                         let mut state_faces = [[[' '; 3]; 3]; 6];
                         for i in 0..6 {
                             // let face = Self::extract_bits(&latestFacelet, faces[i] * 24, 24) as u32;
-                            let face = &latest_facelet[((faces[i] * 24)/8)..((24 + faces[i] * 24)/8)];
+                            let face =
+                                &latest_facelet[((faces[i] * 24) / 8)..((24 + faces[i] * 24) / 8)];
                             for j in 0..8 {
                                 let f = Self::extract_bits(&face, j * 3, 3) as usize;
                                 cur_state.push("FBUDLR".as_bytes()[f]);
@@ -611,12 +611,13 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                         for i in 0..6 {
                             for j in 0..3 {
                                 for k in 0..3 {
-                                    state_faces[i][j][k] = cur_state_str.as_bytes()[i * 9 + j * 3 + k] as char;
+                                    state_faces[i][j][k] =
+                                        cur_state_str.as_bytes()[i * 9 + j * 3 + k] as char;
                                 }
                             }
                         }
-                        println!("cur_state: {:?}", cur_state_str);
-                        println!("cur_state_faces: {:?}", state_faces);
+                        // println!("cur_state: {:?}", cur_state_str);
+                        // println!("cur_state_faces: {:?}", state_faces);
 
                         // Set up corner and edge state
                         let mut corners = [0; 8];
@@ -632,15 +633,30 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                         let mut total_corner_twist = 0;
                         let mut total_edge_parity = 0;
 
+                        let edge_indices: [usize; 12 * 3 * 2] = [
+                            0, 1, 2, 1, 0, 1, // UR = 0,
+                            0, 2, 1, 2, 0, 1, // UF = 1,
+                            0, 1, 0, 4, 0, 1, // UL = 2,
+                            0, 0, 1, 7, 0, 1, // UB = 3,
+                            3, 1, 2, 1, 2, 1, // DR = 4,
+                            3, 0, 1, 2, 2, 1, // DF = 5,
+                            3, 1, 0, 4, 2, 1, // DL = 6,
+                            3, 2, 1, 5, 2, 1, // DB = 7,
+                            2, 1, 2, 1, 1, 0, // FR = 8,
+                            2, 1, 0, 4, 1, 2, // FL = 9,
+                            5, 1, 2, 4, 1, 0, // BL = 10,
+                            5, 1, 0, 1, 1, 2, // BR = 11,
+                        ];
+
                         let face_indices = [
-                            0,0,0, 4,0,0, 5,0,2, // ULB
-                            0,0,2, 5,0,0, 1,0,2, // UBR
-                            0,2,2, 1,0,0, 2,0,2, // URF
-                            0,2,0, 2,0,0, 4,0,2, // UFL
-                            3,0,0, 5,2,2, 4,2,0, // DBL
-                            3,0,2, 1,2,2, 5,2,0, // DRB
-                            3,2,2, 2,2,2, 1,2,0, // DFR
-                            3,2,0, 4,2,0, 2,2,2, // DLF
+                            0, 2, 2, 1, 0, 0, 2, 0, 2, // URF
+                            0, 2, 0, 2, 0, 0, 4, 0, 2, // UFL
+                            0, 0, 0, 4, 0, 0, 5, 0, 2, // ULB
+                            0, 0, 2, 5, 0, 0, 1, 0, 2, // UBR
+                            3, 2, 2, 2, 2, 2, 1, 2, 0, // DFR
+                            3, 2, 0, 4, 2, 0, 2, 2, 2, // DLF
+                            3, 0, 0, 5, 2, 2, 4, 2, 0, // DBL
+                            3, 0, 2, 1, 2, 2, 5, 2, 0, // DRB
                         ];
                         let fi = face_indices;
                         let sf = state_faces;
@@ -656,7 +672,7 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                             //     return;
                             // }
                             // let corner = "".join(state_faces)
-                            // corners[i] = 
+                            // corners[i] =
                             let j = i * 9;
                             let mut s = String::from("");
                             for k in 0..3 {
@@ -675,8 +691,7 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                             vcorners.push(corner);
                             corners[i] = corner as u32;
                         }
-                        println!("Corners: {:?}", vcorners.clone());
-
+                        // println!("Corners: {:?}", vcorners.clone());
 
                         // Decode edges. There are only 11 in the packet because the
                         // last one is implicit (the one missing).
@@ -695,7 +710,7 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                         // already verified each corner and edge was unique.
                         // corners[7] = *corners_left.iter().next().unwrap();
                         edges[11] = *edges_left.iter().next().unwrap();
-                        println!("edges: {:?}", edges);
+                        // println!("edges: {:?}", edges);
 
                         // Compute the corner twist and edge parity of the last corner
                         // and edge piece. The corner twist must be a multiple of 3 and
@@ -726,13 +741,13 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                             edge_pieces.try_into().unwrap(),
                         );
 
-                        println!("stste set: {:?}", cube.clone());
+                        // println!("stste set: {:?}", cube.clone());
                         *state_copy.lock().unwrap() = cube;
                         *state_set_copy.lock().unwrap() = true;
                     }
                     Self::BATTERY_STATE_MESSAGE => {
-                        println!("rx: BATTERY_STATE_MESSAGE");
-                        println!("decrypted: {:?}", value);
+                        // println!("rx: BATTERY_STATE_MESSAGE");
+                        // println!("decrypted: {:?}", value);
                         *battery_percentage_copy.lock().unwrap() =
                             Some(Self::extract_bits(&value, 8, 8));
                     }
@@ -998,7 +1013,7 @@ pub(crate) fn moyu_wcu_cube_connect<P: Peripheral + 'static>(
     let mut v2_write = None;
     let mut v2_read = None;
     for characteristic in characteristics {
-        println!("Characteristic: {:?}", characteristic);
+        // println!("Characteristic: {:?}", characteristic);
         if characteristic.uuid == Uuid::from_str("00002a28-0000-1000-8000-00805f9b34fb").unwrap() {
             v1_version = Some(characteristic);
         } else if characteristic.uuid
@@ -1093,7 +1108,7 @@ pub(crate) fn moyu_wcu_cube_connect<P: Peripheral + 'static>(
             ))
         }
     } else if v2_read.is_some() && v2_write.is_some() {
-        println!("v2_read {:?}\nv2_write {:?}", v2_read, v2_write);
+        // println!("v2_read {:?}\nv2_write {:?}", v2_read, v2_write);
         Ok(Box::new(WCUCubeVersion2::new(
             device,
             v2_read.unwrap(),

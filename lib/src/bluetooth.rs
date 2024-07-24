@@ -1,8 +1,8 @@
 mod gan;
-mod moyu_wcu;
 mod giiker;
 mod gocube;
 mod moyu;
+mod moyu_wcu;
 
 use crate::common::TimedMove;
 use crate::cube3x3x3::Cube3x3x3;
@@ -188,14 +188,6 @@ impl BluetoothCube {
             let to_connect = to_connect.lock().unwrap().clone();
             if let Some(to_connect) = to_connect {
                 // Look for the cube in the device list to get the Peripheral object
-                // for device in central.peripherals() {
-                //     println!(
-                //         "Scan checking {:?}\n\t{:?}\n\t{:?}",
-                //         device.address(),
-                //         device.characteristics(),
-                //         device.properties()
-                //     );
-                // }
                 for device in central.peripherals() {
                     if to_connect == device.address() {
                         let listeners_copy = listeners.clone();
@@ -407,7 +399,6 @@ impl BluetoothCube {
             BluetoothCubeType::Giiker => giiker_connect(peripheral, move_listener)?,
             BluetoothCubeType::MoYu => moyu_connect(peripheral, move_listener)?,
             BluetoothCubeType::MoYuWCU => moyu_wcu_cube_connect(peripheral, move_listener)?,
-            
         };
 
         init(cube.as_ref());
