@@ -391,31 +391,12 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
     ) -> Result<Self> {
         // Derive keys. These are based on a 6 byte device identifier found in the
         // manufacturer data.
-        // let &device_name = &device.properties().local_name.unwrap();
         let mac = if let Some(device_name) = device.properties().local_name {
-            // let mut result = "";
-            // let re = Regex::new("^WCU_MY32_[0-9A-F]{4}$").unwrap();
-            // if re.is_match(device_name) {
-            // let prefix = "CF:30:16:00:".to_owned();
             let prefix = "CF301600".to_owned();
-            // let first_part = device_name[9..11].to_owned();
-            // let second_part = device_name[11..13].to_owned();
             let cube_id = device_name[9..13].to_owned();
-            // let colon: &str = ":";
-            // let result = prefix + &first_part + colon + &second_part;
             let result = prefix + &cube_id;
             result
-            // result.copy(&result_);
-            // let first_part = device_name[9..11].to_owned();
-            // let second_part = device_name[11..13].to_owned();
-            // result = format!(
-            //     "CF:30:16:00:{first_part}:{second_part}"
-            // );
-            // } else {
-            //     return Err(anyhow!("Manufacturer data missing device identifier"));
-            // }
 
-            // result
         } else {
             return Err(anyhow!("Manufacturer data missing device identifier"));
         };
@@ -424,32 +405,6 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
             .map(|i| u8::from_str_radix(&mac[i..i + 2], 16))
             .collect();
         let device_key = mac_data.ok().unwrap();
-        // println!("properties: {:?}", device.properties());
-        // println!(
-        //     "getting device key... from {:?}",
-        //     device.properties().manufacturer_data.get(&0)
-        // );
-        // let device_key: [u8; 6] = mac_data;
-        // let device_key: [u8; 6] = if let Some(data) = device.properties().manufacturer_data.get(&0)
-        // let device_key: [u8; 6] = if let Some(data) = device.properties().local_name {
-        //     if data.len() >= 13 {
-        //         let result: [u8; 6] = (0..mac.len()).step_by(2).map(|i| {
-        //             u8::from_str_radix(&mac[i..i + 2], 16)
-        //                 .unwrap()
-        //                 .to_be_bytes()
-        //         }).collect();
-        //         // let mut result = [0; 6];
-        //         // // result.copy_from_slice(&data[3..9]);
-        //         // result.copy(&data);
-        //         println!("result: {:?}", result);
-        //         result
-        //     } else {
-        //         return Err(anyhow!("Device identifier data invalid"));
-        //     }
-        // } else {
-        //     return Err(anyhow!("Manufacturer data missing device identifier"));
-        // };
-        // println!("device_key: {:?}", device_key);
 
         const WCU_V2_KEY: [u8; 16] = [
             0x15, 0x77, 0x3a, 0x5c, 0x67, 0xe, 0x2d, 0x1f, 0x17, 0x67, 0x2a, 0x13, 0x9b, 0x67,
@@ -683,7 +638,7 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                                 s.extend([foo]);
                             }
                             let corner = s;
-                            print!("corner[{}]: {}; ", i, &corner);
+                            // print!("corner[{}]: {}; ", i, &corner);
                             if i == 3 {
                                 print!("\n");
                             }
