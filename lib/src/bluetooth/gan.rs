@@ -391,7 +391,6 @@ impl<P: Peripheral> GANCubeVersion2<P> {
         } else {
             return Err(anyhow!("Manufacturer data missing device identifier"));
         };
-        println!("device_key: {:?}", device_key);
 
         const GAN_V2_KEY: [u8; 16] = [
             0x01, 0x02, 0x42, 0x28, 0x31, 0x91, 0x16, 0x07, 0x20, 0x05, 0x18, 0x54, 0x42, 0x11,
@@ -427,8 +426,6 @@ impl<P: Peripheral> GANCubeVersion2<P> {
         let synced_copy = synced.clone();
 
         device.on_notification(Box::new(move |value| {
-            println!("on_notification: {:?}", &value.value);
-
             if let Ok(value) = cipher_copy.decrypt(&value.value) {
                 let message_type = Self::extract_bits(&value, 0, 4) as u8;
                 match message_type {

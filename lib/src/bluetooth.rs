@@ -358,7 +358,6 @@ impl BluetoothCube {
                 if let Some(name) = device.properties().local_name {
                     match BluetoothCubeType::from_name(&name) {
                         Some(cube_type) => {
-                            println!("BluetoothCubeType: {:?} {:?}", cube_type, name);
                             new_devices.push(AvailableDevice {
                                 address: device.address(),
                                 name: name.clone(),

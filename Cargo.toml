@@ -18,6 +18,8 @@ chrono = "0.4"
 gl_matrix = "0.0"
 num-traits = "0.2"
 image = { version="0.23", default-features=false, features=["png"] }
+lz-str = "0.2.1"
+regex = "1.10.5"
 
 [features]
 default = ["tpscube_core/native-storage", "tpscube_core/bluetooth"]
@@ -82,3 +84,4 @@ glium = "0.30"
 tinyfiledialogs = "3.8"
 sdl2 = { version="0.34", features=["bundled", "static-link"] }
 tokio = { version="1.7", features=["full"] }
+regex = "1.10.5"

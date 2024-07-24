@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use uuid::Uuid;
+use strum_macros::EnumString;
 
 #[cfg(not(feature = "no_solver"))]
 use std::convert::TryInto;
@@ -24,7 +25,7 @@ pub enum Color {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive, EnumString)]
 /// Identification of a corner piece. Names come from the faces of the cube this corner
 /// belongs to on a solved cube.
 pub enum Corner {

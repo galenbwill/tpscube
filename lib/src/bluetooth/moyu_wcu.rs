@@ -10,13 +10,17 @@ use aes::{
 };
 use anyhow::{anyhow, Result};
 use btleplug::api::{Characteristic, Peripheral, WriteType};
+use num_enum::TryFromPrimitive;
+// use std::borrow::Borrow;
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 use std::iter::FromIterator;
+use std::num::ParseIntError;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use uuid::Uuid;
+
 
 struct WCUCubeVersion1Characteristics {
     version: Characteristic,
@@ -101,7 +105,10 @@ impl<P: Peripheral> WCUCubeVersion1<P> {
         // Get initial cube state
         println!("reading initial cube state...");
         let state = device.read(&characteristics.cube_state)?;
-        println!("characteristics.cube_state {:?}", characteristics.cube_state);
+        println!(
+            "characteristics.cube_state {:?}",
+            characteristics.cube_state
+        );
         if state.len() < 18 {
             return Err(anyhow!("Cube state is invalid"));
         }
@@ -368,10 +375,12 @@ impl WCUCubeVersion1Cipher {
 }
 
 impl<P: Peripheral> WCUCubeVersion2<P> {
-    const CUBE_MOVES_MESSAGE: u8 = 2;
-    const CUBE_STATE_MESSAGE: u8 = 4;
-    const BATTERY_STATE_MESSAGE: u8 = 9;
+    const CUBE_INFO_MESSAGE: u8 = 161; // 2;
+    const CUBE_STATE_MESSAGE: u8 = 163; // 4;
+    const BATTERY_STATE_MESSAGE: u8 = 164; // 9;
+    const CUBE_MOVES_MESSAGE: u8 = 165; // 2;
     const RESET_CUBE_STATE_MESSAGE: u8 = 10;
+    const CUBE_GYRO_MESSAGE: u8 = 171; // 2;
 
     const CUBE_STATE_TIMEOUT_MS: usize = 2000;
 
@@ -383,41 +392,82 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
     ) -> Result<Self> {
         // Derive keys. These are based on a 6 byte device identifier found in the
         // manufacturer data.
-        println!("getting device key... from {:?}", device.properties().manufacturer_data.get(&0));
-        let device_key: [u8; 6] = if let Some(data) = device.properties().manufacturer_data.get(&0)
-        {
-            if data.len() >= 9 {
-                let mut result = [0; 6];
-                result.copy_from_slice(&data[3..9]);
-                println!("result: {:?}", result);
-                result
-            } else {
-                return Err(anyhow!("Device identifier data invalid"));
-            }
+        // let &device_name = &device.properties().local_name.unwrap();
+        let mac = if let Some(device_name) = device.properties().local_name {
+            // let mut result = "";
+            // let re = Regex::new("^WCU_MY32_[0-9A-F]{4}$").unwrap();
+            // if re.is_match(device_name) {
+            // let prefix = "CF:30:16:00:".to_owned();
+            let prefix = "CF301600".to_owned();
+            // let first_part = device_name[9..11].to_owned();
+            // let second_part = device_name[11..13].to_owned();
+            let cube_id = device_name[9..13].to_owned();
+            // let colon: &str = ":";
+            // let result = prefix + &first_part + colon + &second_part;
+            let result = prefix + &cube_id;
+            result
+            // result.copy(&result_);
+            // let first_part = device_name[9..11].to_owned();
+            // let second_part = device_name[11..13].to_owned();
+            // result = format!(
+            //     "CF:30:16:00:{first_part}:{second_part}"
+            // );
+            // } else {
+            //     return Err(anyhow!("Manufacturer data missing device identifier"));
+            // }
+
+            // result
         } else {
             return Err(anyhow!("Manufacturer data missing device identifier"));
         };
+        let mac_data: Result<Vec<u8>, ParseIntError> = (0..mac.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&mac[i..i + 2], 16))
+            .collect();
+        let device_key = mac_data.ok().unwrap();
+        println!("properties: {:?}", device.properties());
+        println!(
+            "getting device key... from {:?}",
+            device.properties().manufacturer_data.get(&0)
+        );
+        // let device_key: [u8; 6] = mac_data;
+        // let device_key: [u8; 6] = if let Some(data) = device.properties().manufacturer_data.get(&0)
+        // let device_key: [u8; 6] = if let Some(data) = device.properties().local_name {
+        //     if data.len() >= 13 {
+        //         let result: [u8; 6] = (0..mac.len()).step_by(2).map(|i| {
+        //             u8::from_str_radix(&mac[i..i + 2], 16)
+        //                 .unwrap()
+        //                 .to_be_bytes()
+        //         }).collect();
+        //         // let mut result = [0; 6];
+        //         // // result.copy_from_slice(&data[3..9]);
+        //         // result.copy(&data);
+        //         println!("result: {:?}", result);
+        //         result
+        //     } else {
+        //         return Err(anyhow!("Device identifier data invalid"));
+        //     }
+        // } else {
+        //     return Err(anyhow!("Manufacturer data missing device identifier"));
+        // };
         println!("device_key: {:?}", device_key);
 
         const WCU_V2_KEY: [u8; 16] = [
-            // 0x01, 0x02, 0x42, 0x28, 0x31, 0x91, 0x16, 0x07, 0x20, 0x05, 0x18, 0x54, 0x42, 0x11,
-            // 0x12, 0x53,
-            0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36, 0x6c, 0xd8, 0xab, 0x4d,
-            0x9a, 0x2f,
+            0x15, 0x77, 0x3a, 0x5c, 0x67, 0xe, 0x2d, 0x1f, 0x17, 0x67, 0x2a, 0x13, 0x9b, 0x67,
+            0x52, 0x57,
         ];
         const WCU_V2_IV: [u8; 16] = [
-            // 0x11, 0x03, 0x32, 0x28, 0x21, 0x01, 0x76, 0x27, 0x20, 0x95, 0x78, 0x14, 0x32, 0x12,
-            // 0x02, 0x43,
-            0x02, 0x04, 0x06, 0x09, 0x0b, 0x11, 0x1f, 0x3f, 0x0d, 0x10, 0x11, 0x13, 0x20, 0x35,
-            0x3f, 0x02,
+            0x11, 0x23, 0x26, 0x25, 0x86, 0x2a, 0x2c, 0x3b, 0x55, 0x6, 0x7f, 0x31, 0x7e, 0x67,
+            0x21, 0x57,
         ];
         let mut key = WCU_V2_KEY.clone();
         let mut iv = WCU_V2_IV.clone();
-        for (idx, byte) in device_key.iter().enumerate() {
-            key[idx] = ((key[idx] as u16 + *byte as u16) % 255) as u8;
-            iv[idx] = ((iv[idx] as u16 + *byte as u16) % 255) as u8;
+        // for (idx, byte) in device_key.iter().enumerate() {
+        for idx in 0..device_key.len() {
+            key[idx] = ((key[idx] as u16 + device_key[5 - idx] as u16) % 255) as u8;
+            iv[idx] = ((iv[idx] as u16 + device_key[5 - idx] as u16) % 255) as u8;
         }
-        let cipher = WCUCubeVersion2Cipher {
+        let cipher: WCUCubeVersion2Cipher = WCUCubeVersion2Cipher {
             device_key: key,
             device_iv: iv,
         };
@@ -433,17 +483,29 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
         let state_copy = state.clone();
         let state_set_copy = state_set.clone();
         let battery_percentage_copy = battery_percentage.clone();
-        let battery_charging_copy = battery_charging.clone();
+        let _battery_charging_copy = battery_charging.clone();
         let synced_copy = synced.clone();
 
         device.on_notification(Box::new(move |value| {
-            println!("on_notification: {:?}", &value.value);
+            // println!("on_notification: {:?}", &value.value);
             if let Ok(value) = cipher_copy.decrypt(&value.value) {
-                let message_type = Self::extract_bits(&value, 0, 4) as u8;
+                // let message_type = Self::extract_bits(&value, 0, 4) as u8;
+                let message_type = value[0];
+                // println!("message_type: {}", message_type);
                 match message_type {
+                    Self::CUBE_GYRO_MESSAGE => {
+                        // println!("rx: CUBE_GYRO_MESSAGE");
+                    }
+                    Self::CUBE_INFO_MESSAGE => {
+                        println!("rx: CUBE_INFO_MESSAGE");
+                        println!("decrypted: {:?}", value);
+                    }
                     Self::CUBE_MOVES_MESSAGE => {
-                        let current_move_count = Self::extract_bits(&value, 4, 8) as u8;
+                        println!("rx: CUBE_MOVES_MESSAGE");
+                        println!("decrypted: {:?}", value);
+                        let current_move_count = Self::extract_bits(&value, 88, 8) as u8;
 
+                        println!("current_move_count: {}", current_move_count);
                         // If we haven't received a cube state message yet, we can't know what
                         // the curent cube state is. Ignore moves until the cube state message
                         // is received. If there has been a cube state message, we will have
@@ -453,6 +515,8 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                             // Check number of moves since last message.
                             let move_count =
                                 current_move_count.wrapping_sub(last_move_count) as usize;
+                            println!("last_move_count: {}", last_move_count);
+                            println!("move_count: {}", move_count);
                             if move_count > 7 {
                                 // There are too many moves since the last message. Our cube
                                 // state is out of sync. Let the client know and reset the
@@ -472,21 +536,21 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                                 let i = (move_count - 1) - j;
 
                                 // Decode move data
-                                let move_num = Self::extract_bits(&value, 12 + i * 5, 5) as usize;
-                                let move_time = Self::extract_bits(&value, 12 + 7 * 5 + i * 16, 16);
+                                let move_num = Self::extract_bits(&value, 96 + i * 5, 5) as usize;
+                                let move_time = Self::extract_bits(&value, 8 + i * 16, 16);
                                 const MOVES: &[Move] = &[
-                                    Move::U,
-                                    Move::Up,
-                                    Move::R,
-                                    Move::Rp,
                                     Move::F,
                                     Move::Fp,
+                                    Move::B,
+                                    Move::Bp,
+                                    Move::U,
+                                    Move::Up,
                                     Move::D,
                                     Move::Dp,
                                     Move::L,
                                     Move::Lp,
-                                    Move::B,
-                                    Move::Bp,
+                                    Move::R,
+                                    Move::Rp,
                                 ];
                                 if move_num >= MOVES.len() {
                                     // Bad move data. Cube is now desynced.
@@ -503,6 +567,8 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
 
                             *last_move_count_option = Some(current_move_count);
 
+                            println!("moves: {:?}", moves.clone());
+
                             if moves.len() != 0 {
                                 // Let clients know there is a new move
                                 move_listener(BluetoothCubeEvent::Move(
@@ -510,11 +576,47 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                                     state_copy.lock().unwrap().clone(),
                                 ));
                             }
+                        } else {
                         }
                     }
                     Self::CUBE_STATE_MESSAGE => {
+                        println!("rx: CUBE_STATE_MESSAGE");
+                        println!("decrypted: {:?}", value);
                         *last_move_count.lock().unwrap() =
-                            Some(Self::extract_bits(&value, 4, 8) as u8);
+                            Some(Self::extract_bits(&value, 152, 8) as u8);
+                        let latest_facelet = &value[1..20];
+                        // let latest_facelet: [u8; 20] = {
+                        //     let values =
+                        //     // Some(Self::extract_bits(&value, 8, 152));
+                        //     &value[1..20];
+                        //     let mut result: Vec<u8> = Vec::new();
+                        //     result
+                        // };
+                        let faces = [2, 5, 0, 3, 4, 1];
+                        let mut cur_state: Vec<u8> = Vec::new();
+                        let mut state_faces = [[[' '; 3]; 3]; 6];
+                        for i in 0..6 {
+                            // let face = Self::extract_bits(&latestFacelet, faces[i] * 24, 24) as u32;
+                            let face = &latest_facelet[((faces[i] * 24)/8)..((24 + faces[i] * 24)/8)];
+                            for j in 0..8 {
+                                let f = Self::extract_bits(&face, j * 3, 3) as usize;
+                                cur_state.push("FBUDLR".as_bytes()[f]);
+                                // state.push("FBUDLR"[])
+                                if j == 3 {
+                                    cur_state.push("FBUDLR".as_bytes()[faces[i]]);
+                                }
+                            }
+                        }
+                        let cur_state_str = String::from_utf8(cur_state).expect("URFDLB");
+                        for i in 0..6 {
+                            for j in 0..3 {
+                                for k in 0..3 {
+                                    state_faces[i][j][k] = cur_state_str.as_bytes()[i * 9 + j * 3 + k] as char;
+                                }
+                            }
+                        }
+                        println!("cur_state: {:?}", cur_state_str);
+                        println!("cur_state_faces: {:?}", state_faces);
 
                         // Set up corner and edge state
                         let mut corners = [0; 8];
@@ -523,27 +625,64 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                             HashSet::from_iter((&[0, 1, 2, 3, 4, 5, 6, 7]).iter().cloned());
                         let mut edges = [0; 12];
                         let mut edge_parity = [0; 12];
+                        let edges_initial = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
                         let mut edges_left: HashSet<u32> = HashSet::from_iter(
                             (&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).iter().cloned(),
                         );
                         let mut total_corner_twist = 0;
                         let mut total_edge_parity = 0;
 
+                        let face_indices = [
+                            0,0,0, 4,0,0, 5,0,2, // ULB
+                            0,0,2, 5,0,0, 1,0,2, // UBR
+                            0,2,2, 1,0,0, 2,0,2, // URF
+                            0,2,0, 2,0,0, 4,0,2, // UFL
+                            3,0,0, 5,2,2, 4,2,0, // DBL
+                            3,0,2, 1,2,2, 5,2,0, // DRB
+                            3,2,2, 2,2,2, 1,2,0, // DFR
+                            3,2,0, 4,2,0, 2,2,2, // DLF
+                        ];
+                        let fi = face_indices;
+                        let sf = state_faces;
+                        let names = "URFDLB".as_bytes();
+                        let mut vcorners: Vec<Corner> = Vec::new();
                         // Decode corners. There are only 7 in the packet because the
                         // last one is implicit (the one missing).
-                        for i in 0..7 {
-                            corners[i] = Self::extract_bits(&value, 12 + i * 3, 3);
-                            corner_twist[i] = Self::extract_bits(&value, 33 + i * 2, 2);
-                            total_corner_twist += corner_twist[i];
-                            if !corners_left.remove(&corners[i]) || corner_twist[i] >= 3 {
-                                return;
+                        for i in 0..8 {
+                            // corners[i] = Self::extract_bits(&value, 12 + i * 3, 3);
+                            // corner_twist[i] = Self::extract_bits(&value, 33 + i * 2, 2);
+                            // total_corner_twist += corner_twist[i];
+                            // if !corners_left.remove(&corners[i]) || corner_twist[i] >= 3 {
+                            //     return;
+                            // }
+                            // let corner = "".join(state_faces)
+                            // corners[i] = 
+                            let j = i * 9;
+                            let mut s = String::from("");
+                            for k in 0..3 {
+                                let b = j + 3 * k;
+                                let sff = sf[fi[b]];
+                                let foo = sff[fi[b + 1]][fi[b + 2]];
+                                // s.extend(names[foo] as char);
+                                s.extend([foo]);
                             }
+                            let corner = s;
+                            print!("corner[{}]: {}; ", i, &corner);
+                            if i == 3 {
+                                print!("\n");
+                            }
+                            let corner = Corner::from_str(&corner).unwrap();
+                            vcorners.push(corner);
+                            corners[i] = corner as u32;
                         }
+                        println!("Corners: {:?}", vcorners.clone());
+
 
                         // Decode edges. There are only 11 in the packet because the
                         // last one is implicit (the one missing).
                         for i in 0..11 {
-                            edges[i] = Self::extract_bits(&value, 47 + i * 4, 4);
+                            // edges[i] = Self::extract_bits(&value, 47 + i * 4, 4);
+                            edges[i] = edges_initial[i];
                             edge_parity[i] = Self::extract_bits(&value, 91 + i, 1);
                             total_edge_parity += edge_parity[i];
                             if !edges_left.remove(&edges[i]) || edge_parity[i] >= 2 {
@@ -554,8 +693,9 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                         // Add in the missing corner and edge based on the last one
                         // left. There will always be exactly one left since we
                         // already verified each corner and edge was unique.
-                        corners[7] = *corners_left.iter().next().unwrap();
+                        // corners[7] = *corners_left.iter().next().unwrap();
                         edges[11] = *edges_left.iter().next().unwrap();
+                        println!("edges: {:?}", edges);
 
                         // Compute the corner twist and edge parity of the last corner
                         // and edge piece. The corner twist must be a multiple of 3 and
@@ -586,12 +726,13 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                             edge_pieces.try_into().unwrap(),
                         );
 
+                        println!("stste set: {:?}", cube.clone());
                         *state_copy.lock().unwrap() = cube;
                         *state_set_copy.lock().unwrap() = true;
                     }
                     Self::BATTERY_STATE_MESSAGE => {
-                        *battery_charging_copy.lock().unwrap() =
-                            Some(Self::extract_bits(&value, 4, 4) != 0);
+                        println!("rx: BATTERY_STATE_MESSAGE");
+                        println!("decrypted: {:?}", value);
                         *battery_percentage_copy.lock().unwrap() =
                             Some(Self::extract_bits(&value, 8, 8));
                     }
@@ -600,6 +741,12 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
             }
         }));
         device.subscribe(&read)?;
+
+        // Request battery state immediately
+        let mut message: [u8; 20] = [0; 20];
+        message[0] = Self::CUBE_INFO_MESSAGE;
+        let message = cipher.encrypt(&message)?;
+        device.write(&write, &message, WriteType::WithResponse)?;
 
         // Request initial cube state
         let mut loop_count = 0;
@@ -653,7 +800,7 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
 
 impl WCUCubeVersion2Cipher {
     fn decrypt(&self, value: &[u8]) -> Result<Vec<u8>> {
-        println!("decrypt: {:?}", value);
+        // println!("decrypt: {:?}", value);
         if value.len() <= 16 {
             return Err(anyhow!("Packet size less than expected length"));
         }
@@ -667,7 +814,7 @@ impl WCUCubeVersion2Cipher {
         let mut end_plain = Block::clone_from_slice(end_cipher);
         aes.decrypt_block(&mut end_plain);
         for i in 0..16 {
-            end_plain[i] ^= self.device_iv[i];
+            end_plain[i] ^= !!self.device_iv[i];
             value[offset + i] = end_plain[i];
         }
 
@@ -677,7 +824,7 @@ impl WCUCubeVersion2Cipher {
         let mut start_plain = Block::clone_from_slice(start_cipher);
         aes.decrypt_block(&mut start_plain);
         for i in 0..16 {
-            start_plain[i] ^= self.device_iv[i];
+            start_plain[i] ^= !!self.device_iv[i];
             value[i] = start_plain[i];
         }
 
@@ -693,7 +840,7 @@ impl WCUCubeVersion2Cipher {
         // of the packet in place.
         let mut value = value.to_vec();
         for i in 0..16 {
-            value[i] ^= self.device_iv[i];
+            value[i] ^= !!self.device_iv[i];
         }
         let mut cipher = Block::clone_from_slice(&value[0..16]);
         let aes = Aes128::new(GenericArray::from_slice(&self.device_key));
@@ -706,7 +853,7 @@ impl WCUCubeVersion2Cipher {
         // with the decrypted block above.
         let offset = value.len() - 16;
         for i in 0..16 {
-            value[offset + i] ^= self.device_iv[i];
+            value[offset + i] ^= !!self.device_iv[i];
         }
         let mut cipher = Block::clone_from_slice(&value[offset..]);
         aes.encrypt_block(&mut cipher);
@@ -874,30 +1021,30 @@ pub(crate) fn moyu_wcu_cube_connect<P: Peripheral + 'static>(
             == Uuid::from_str("0000fff7-0000-1000-8000-00805f9b34fb").unwrap()
         {
             v1_battery = Some(characteristic);
-        } else if characteristic.uuid
-            == Uuid::from_str("28be4a4a-cd67-11e9-a32f-2a2ae2dbcce4").unwrap()
-        {
-            v2_write = Some(characteristic);
-        } else if characteristic.uuid
-            == Uuid::from_str("28be4cb6-cd67-11e9-a32f-2a2ae2dbcce4").unwrap()
-        {
-            v2_read = Some(characteristic);
-        } else if characteristic.uuid
-            == Uuid::from_str("02F00000-0000-0000-0000-00000000FF01").unwrap()
-        {
-            v2_write = Some(characteristic);
-        } else if characteristic.uuid
-            == Uuid::from_str("02F00000-0000-0000-0000-00000000FF02").unwrap()
-        {
-            v2_read = Some(characteristic);
         // } else if characteristic.uuid
-        //     == Uuid::from_str("0783B03E-7735-B5A0-1760-A305D2795CB2").unwrap()
+        //     == Uuid::from_str("28be4a4a-cd67-11e9-a32f-2a2ae2dbcce4").unwrap()
         // {
         //     v2_write = Some(characteristic);
         // } else if characteristic.uuid
-        //     == Uuid::from_str("0783B03E-7735-B5A0-1760-A305D2795CB1").unwrap()
+        //     == Uuid::from_str("28be4cb6-cd67-11e9-a32f-2a2ae2dbcce4").unwrap()
         // {
         //     v2_read = Some(characteristic);
+        } else if characteristic.uuid
+            == Uuid::from_str("0783b03e-7735-b5a0-1760-a305d2795cb2").unwrap()
+        {
+            v2_write = Some(characteristic);
+        } else if characteristic.uuid
+            == Uuid::from_str("0783b03e-7735-b5a0-1760-a305d2795cb1").unwrap()
+        {
+            v2_read = Some(characteristic);
+            // } else if characteristic.uuid
+            //     == Uuid::from_str("0783B03E-7735-B5A0-1760-A305D2795CB2").unwrap()
+            // {
+            //     v2_write = Some(characteristic);
+            // } else if characteristic.uuid
+            //     == Uuid::from_str("0783B03E-7735-B5A0-1760-A305D2795CB1").unwrap()
+            // {
+            //     v2_read = Some(characteristic);
         }
     }
 
