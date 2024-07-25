@@ -604,15 +604,23 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                         ];
 
                         let face_indices = [
-                            0, 2, 2, 1, 0, 0, 2, 0, 2, // URF
-                            0, 2, 0, 2, 0, 0, 4, 0, 2, // UFL
-                            0, 0, 0, 4, 0, 0, 5, 0, 2, // ULB
-                            0, 0, 2, 5, 0, 0, 1, 0, 2, // UBR
-                            3, 2, 2, 2, 2, 2, 1, 2, 0, // DFR
-                            3, 2, 0, 4, 2, 0, 2, 2, 2, // DLF
-                            3, 0, 0, 5, 2, 2, 4, 2, 0, // DBL
-                            3, 0, 2, 1, 2, 2, 5, 2, 0, // DRB
+                            0, 2, 2,  1, 0, 0,  2, 0, 2, // URF
+                            0, 2, 0,  2, 0, 0,  4, 0, 2, // UFL
+                            0, 0, 0,  4, 0, 0,  5, 0, 2, // ULB
+                            0, 0, 2,  5, 0, 0,  1, 0, 2, // UBR
+                            3, 0, 2,  2, 2, 2,  1, 2, 0, // DFR
+                            3, 0, 0,  4, 2, 2,  2, 2, 0, // DLF
+                            3, 2, 0,  5, 2, 2,  4, 2, 0, // DBL
+                            3, 2, 2,  1, 2, 2,  5, 2, 0, // DRB
                         ];
+                        if false {
+                            for y in 0..3 {
+                                for f in 0..6 {
+                                    print!("{:?}    ", state_faces[f][y])
+                                }
+                                println!();
+                            }
+                        }
                         let fi = face_indices;
                         let sf = state_faces;
                         let names = "URFDLB".as_bytes();
@@ -626,8 +634,6 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                             // if !corners_left.remove(&corners[i]) || corner_twist[i] >= 3 {
                             //     return;
                             // }
-                            // let corner = "".join(state_faces)
-                            // corners[i] =
                             let j = i * 9;
                             let mut s = String::from("");
                             for k in 0..3 {
@@ -635,14 +641,84 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                                 let sff = sf[fi[b]];
                                 let foo = sff[fi[b + 1]][fi[b + 2]];
                                 // s.extend(names[foo] as char);
-                                s.extend([foo]);
+                                if s.len() > 0 && foo == 'U' || foo == 'D' {
+                                    corner_twist[i] = k;
+                                    let mut ss = String::from("");
+                                    ss.extend([foo]);
+                                    ss += &s;
+                                    s = ss;
+                                }
+                                // else if s.len() == 2 && (s.as_bytes()[0] as char == 'U' || s.as_bytes()[0] as char == 'D') {
+                                //     let first = s.as_bytes()[0] as char;
+                                //     let second = s.as_bytes()[0] as char;
+                                //     if first == 'D' {
+                                //         if foo == 'F' && second == 'R' {
+                                //             s = String::from("DFR");
+                                //         }
+                                //         else if foo == 'L' && second == 'F' {
+                                //             s = String::from("DLF");
+                                //         }
+                                //         else if foo == 'B' && second == 'L' {
+                                //             s = String::from("DBL");
+                                //         }
+                                //         else if foo == 'R' && second == 'B' {
+                                //             s = String::from("DRB");
+                                //         }
+                                //         else {
+                                //             s.extend([foo]);
+                                //         }
+                                //     }
+                                //     else if first == 'U' {
+                                //         if foo == 'R' && second == 'F' {
+                                //             s = String::from("URF");
+                                //         }
+                                //         else if foo == 'F' && second == 'L' {
+                                //             s = String::from("UFL");
+                                //         }
+                                //         else if foo == 'L' && second == 'B' {
+                                //             s = String::from("ULB");
+                                //         }
+                                //         else if foo == 'B' && second == 'R' {
+                                //             s = String::from("UBR");
+                                //         }
+                                //         else {
+                                //             s.extend([foo]);
+                                //         }
+                                //     }
+                                // }
+                                else {
+                                    s.extend([foo]);
+                                }
                             }
-                            let corner = s;
-                            // print!("corner[{}]: {}; ", i, &corner);
-                            // if i == 3 {
-                            //     print!("\n");
+                            // corner_twist[i] = 1;
+                            s = String::from(match s.as_str() {
+                                "UFR" => "URF",
+                                "ULF" => "UFL",
+                                "UBL" => "ULB",
+                                "URB" => "UBR",
+                                "DRF" => "DFR",
+                                "DFL" => "DLF",
+                                "DLB" => "DBL",
+                                "DBR" => "DRB",
+                                _ => {
+                                    // corner_twist[i] = 0;
+                                    &s
+                                }
+                            });
+                            total_corner_twist += corner_twist[i];
+                            let mut corner = s;
+                            // println!("corner[{}]: {} twist: {} ", i, &corner, corner_twist[i]);
+                            // if i == 2 {
+                            //     println!();
                             // }
-                            let corner = Corner::from_str(&corner).unwrap();
+
+                            // if corner[0] != 'U' && corner[0] != 'D' {
+                            //     if corner.as_bytes()[2] as char == 'U' || corner[2] == 'D' {
+                            //         corner = corner[2] + corner[0] + corner[1];
+                            //     }
+                            // }
+
+                            let corner = Corner::from_str(&corner).expect("Invalid corner");
                             vcorners.push(corner);
                             corners[i] = corner as u32;
                         }
@@ -670,7 +746,7 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                         // Compute the corner twist and edge parity of the last corner
                         // and edge piece. The corner twist must be a multiple of 3 and
                         // the edge parity must be even.
-                        corner_twist[7] = (3 - total_corner_twist % 3) % 3;
+                        // corner_twist[7] = (3 - total_corner_twist % 3) % 3;
                         edge_parity[11] = total_edge_parity & 1;
 
                         // Create cube state. Our representation of the cube state matches
