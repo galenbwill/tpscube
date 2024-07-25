@@ -10,7 +10,6 @@ use aes::{
 };
 use anyhow::{anyhow, Result};
 use btleplug::api::{Characteristic, Peripheral, WriteType};
-// use std::borrow::Borrow;
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 use std::iter::FromIterator;
@@ -40,12 +39,13 @@ const DEBUG_CORNERS: bool = false;
 const DEBUG_EDGES: bool = false;
 
 impl<P: Peripheral> WCUCubeVersion2<P> {
-    const CUBE_INFO_MESSAGE: u8 = 161; // 2;
-    const CUBE_STATE_MESSAGE: u8 = 163; // 4;
-    const BATTERY_STATE_MESSAGE: u8 = 164; // 9;
-    const CUBE_MOVES_MESSAGE: u8 = 165; // 2;
+    const CUBE_INFO_MESSAGE: u8 = 161;
+    const CUBE_STATE_MESSAGE: u8 = 163;
+    const BATTERY_STATE_MESSAGE: u8 = 164;
+    const CUBE_MOVES_MESSAGE: u8 = 165;
+    // This is probably not a valid message ID, but everything else seems to work
     const RESET_CUBE_STATE_MESSAGE: u8 = 10;
-    const CUBE_GYRO_MESSAGE: u8 = 171; // 2;
+    const CUBE_GYRO_MESSAGE: u8 = 171;
 
     const CUBE_STATE_TIMEOUT_MS: usize = 2000;
 
@@ -55,14 +55,15 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
         write: Characteristic,
         move_listener: Box<dyn Fn(BluetoothCubeEvent) + Send + 'static>,
     ) -> Result<Self> {
-        // Derive keys. These are based on a 6 byte device identifier found in the
-        // manufacturer data.
+        // Derive keys. These are based on the 6 byte MAC, which consists of a 4-byte
+        // fixed prefix followed by two bytes that are hex-encoded in the device name,
+        // but can also be found in the manufacturer data.
+        // From https://github.com/cs0x7f/cstimer/blob/16c2bbae676e5b8ba6581d5d48587fe9f138a236/src/js/hardware/bluetooth.js#L1613-L1631
         let mac = if let Some(device_name) = device.properties().local_name {
             let prefix = "CF301600".to_owned();
             let cube_id = device_name[9..13].to_owned();
             let result = prefix + &cube_id;
             result
-
         } else {
             return Err(anyhow!("Manufacturer data missing device identifier"));
         };
@@ -72,6 +73,7 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
             .collect();
         let device_key = mac_data.ok().unwrap();
 
+        // From https://github.com/cs0x7f/cstimer/blob/16c2bbae676e5b8ba6581d5d48587fe9f138a236/src/js/hardware/bluetooth.js#L1418-L1419
         const WCU_V2_KEY: [u8; 16] = [
             0x15, 0x77, 0x3a, 0x5c, 0x67, 0xe, 0x2d, 0x1f, 0x17, 0x67, 0x2a, 0x13, 0x9b, 0x67,
             0x52, 0x57,
@@ -82,7 +84,6 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
         ];
         let mut key = WCU_V2_KEY.clone();
         let mut iv = WCU_V2_IV.clone();
-        // for (idx, byte) in device_key.iter().enumerate() {
         for idx in 0..device_key.len() {
             key[idx] = ((key[idx] as u16 + device_key[5 - idx] as u16) % 255) as u8;
             iv[idx] = ((iv[idx] as u16 + device_key[5 - idx] as u16) % 255) as u8;
@@ -103,15 +104,12 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
         let state_copy = state.clone();
         let state_set_copy = state_set.clone();
         let battery_percentage_copy = battery_percentage.clone();
-        let _battery_charging_copy = battery_charging.clone();
+        let battery_charging_copy = battery_charging.clone();
         let synced_copy = synced.clone();
 
         device.on_notification(Box::new(move |value| {
-            // println!("on_notification: {:?}", &value.value);
             if let Ok(value) = cipher_copy.decrypt(&value.value) {
-                // let message_type = Self::extract_bits(&value, 0, 4) as u8;
                 let message_type = value[0];
-                // println!("message_type: {}", message_type);
                 match message_type {
                     Self::CUBE_GYRO_MESSAGE => {
                         // println!("rx: CUBE_GYRO_MESSAGE");
@@ -119,13 +117,18 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                     Self::CUBE_INFO_MESSAGE => {
                         // println!("rx: CUBE_INFO_MESSAGE");
                         // println!("decrypted: {:?}", value);
+                        // The data in this message isn't used by tpscube, but its format
+                        // can be found here:
+                        // https://github.com/cs0x7f/cstimer/blob/16c2bbae676e5b8ba6581d5d48587fe9f138a236/src/js/hardware/bluetooth.js#L1693-L1701
                     }
                     Self::CUBE_MOVES_MESSAGE => {
-                        // println!("rx: CUBE_MOVES_MESSAGE");
-                        // println!("decrypted: {:?}", value);
+                        // Encoding of the move count and move data are similar to GANv2,
+                        // but the bit positions have changed, as well as the order of the moves table (MOVES).
+                        // Bit positions from:
+                        // Move count: https://github.com/cs0x7f/cstimer/blob/16c2bbae676e5b8ba6581d5d48587fe9f138a236/src/js/hardware/bluetooth.js#L1718
+                        // Time and moves: https://github.com/cs0x7f/cstimer/blob/16c2bbae676e5b8ba6581d5d48587fe9f138a236/src/js/hardware/bluetooth.js#L1726-L1727
                         let current_move_count = Self::extract_bits(&value, 88, 8) as u8;
 
-                        // println!("current_move_count: {}", current_move_count);
                         // If we haven't received a cube state message yet, we can't know what
                         // the curent cube state is. Ignore moves until the cube state message
                         // is received. If there has been a cube state message, we will have
@@ -135,8 +138,6 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                             // Check number of moves since last message.
                             let move_count =
                                 current_move_count.wrapping_sub(last_move_count) as usize;
-                            // println!("last_move_count: {}", last_move_count);
-                            // println!("move_count: {}", move_count);
                             if move_count > 7 {
                                 // There are too many moves since the last message. Our cube
                                 // state is out of sync. Let the client know and reset the
@@ -187,8 +188,6 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
 
                             *last_move_count_option = Some(current_move_count);
 
-                            // println!("moves: {:?}", moves.clone());
-
                             if moves.len() != 0 {
                                 // Let clients know there is a new move
                                 move_listener(BluetoothCubeEvent::Move(
@@ -200,29 +199,20 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                         }
                     }
                     Self::CUBE_STATE_MESSAGE => {
-                        // println!("rx: CUBE_STATE_MESSAGE");
-                        // println!("decrypted: {:?}", value);
                         *last_move_count.lock().unwrap() =
                             Some(Self::extract_bits(&value, 152, 8) as u8);
                         let latest_facelet = &value[1..20];
-                        // let latest_facelet: [u8; 20] = {
-                        //     let values =
-                        //     // Some(Self::extract_bits(&value, 8, 152));
-                        //     &value[1..20];
-                        //     let mut result: Vec<u8> = Vec::new();
-                        //     result
-                        // };
                         let faces = [2, 5, 0, 3, 4, 1];
                         let mut cur_state: Vec<u8> = Vec::new();
                         let mut state_faces = [[[' '; 3]; 3]; 6];
                         for i in 0..6 {
-                            // let face = Self::extract_bits(&latestFacelet, faces[i] * 24, 24) as u32;
+                            // Parse "facelet"
+                            // From https://github.com/cs0x7f/cstimer/blob/16c2bbae676e5b8ba6581d5d48587fe9f138a236/src/js/hardware/bluetooth.js#L1769-L1782
                             let face =
                                 &latest_facelet[((faces[i] * 24) / 8)..((24 + faces[i] * 24) / 8)];
                             for j in 0..8 {
                                 let f = Self::extract_bits(&face, j * 3, 3) as usize;
                                 cur_state.push("FBUDLR".as_bytes()[f]);
-                                // state.push("FBUDLR"[])
                                 if j == 3 {
                                     cur_state.push("FBUDLR".as_bytes()[faces[i]]);
                                 }
@@ -237,8 +227,6 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                                 }
                             }
                         }
-                        // println!("cur_state: {:?}", cur_state_str);
-                        // println!("cur_state_faces: {:?}", state_faces);
 
                         // Set up corner and edge state
                         let mut corners = [0; 8];
@@ -247,14 +235,13 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                             HashSet::from_iter((&[0, 1, 2, 3, 4, 5, 6, 7]).iter().cloned());
                         let mut edges = [0; 12];
                         let mut edge_parity = [0; 12];
-                        // let edges_initial = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
                         let mut edges_left: HashSet<u32> = HashSet::from_iter(
                             (&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).iter().cloned(),
                         );
                         let mut total_corner_twist = 0;
                         let mut total_edge_parity = 0;
 
-                        let edge_indices: [usize; 12 * 3 * 2] = [
+                        let edge_face_table: [usize; 12 * 3 * 2] = [
                             0, 1, 2,  1, 0, 1, // UR = 0,
                             0, 2, 1,  2, 0, 1, // UF = 1,
                             0, 1, 0,  4, 0, 1, // UL = 2,
@@ -269,7 +256,7 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                             5, 1, 0,  1, 1, 2, // BR = 11,
                         ];
 
-                        let face_indices = [
+                        let corner_face_table = [
                             0, 2, 2,  1, 0, 0,  2, 0, 2, // URF
                             0, 2, 0,  2, 0, 0,  4, 0, 2, // UFL
                             0, 0, 0,  4, 0, 0,  5, 0, 2, // ULB
@@ -287,40 +274,28 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                                 println!();
                             }
                         }
-                        let fi = face_indices;
-                        let sf = state_faces;
-                        // let names = "URFDLB".as_bytes();
-                        // let mut vcorners: Vec<Corner> = Vec::new();
-                        // Decode corners.
+                        // Compute corners from face information.
                         for i in 0..8 {
-                            // corners[i] = Self::extract_bits(&value, 12 + i * 3, 3);
-                            // corner_twist[i] = Self::extract_bits(&value, 33 + i * 2, 2);
-                            // total_corner_twist += corner_twist[i];
-                            // if !corners_left.remove(&corners[i]) || corner_twist[i] >= 3 {
-                            //     return;
-                            // }
                             let j = i * 9;
                             let mut corner_str = String::from("");
                             for k in 0..3 {
                                 let b = j + 3 * k;
-                                let sff = sf[fi[b]];
-                                let foo = sff[fi[b + 1]][fi[b + 2]];
-                                // s.extend(names[foo] as char);
-                                if corner_str.len() > 0 && foo == 'U' || foo == 'D' {
+                                let sff = state_faces[corner_face_table[b]];
+                                let f = sff[corner_face_table[b + 1]][corner_face_table[b + 2]];
+                                if corner_str.len() > 0 && f == 'U' || f == 'D' {
                                     corner_twist[i] = k;
                                     let mut ss = String::from("");
-                                    ss.extend([foo]);
+                                    ss.extend([f]);
                                     ss += &corner_str;
                                     corner_str = ss;
                                 }
                                 else {
-                                    corner_str.extend([foo]);
+                                    corner_str.extend([f]);
                                 }
                             }
                             if i < 7 {
                                 total_corner_twist += corner_twist[i];
                             }
-                            // corner_twist[i] = 1;
                             corner_str = String::from(match corner_str.as_str() {
                                 "UFR" => "URF",
                                 "ULF" => "UFL",
@@ -335,35 +310,21 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                             if DEBUG_CORNERS {
                                 println!("corner[{}]: {} twist: {} ", i, &corner_str, corner_twist[i]);
                             }
-                            // if i == 2 {
-                            //     println!();
-                            // }
-
-                            // if corner[0] != 'U' && corner[0] != 'D' {
-                            //     if corner.as_bytes()[2] as char == 'U' || corner[2] == 'D' {
-                            //         corner = corner[2] + corner[0] + corner[1];
-                            //     }
-                            // }
 
                             let corner = Corner::from_str(&corner_str).expect("Invalid corner");
-                            // vcorners.push(corner);
                             corners[i] = corner as u32;
                             if !corners_left.remove(&corners[i]) || corner_twist[i] >= 3 {
                                 return;
                             }
                         }
-                        // println!("Corners: {:?}", vcorners.clone());
 
-                        // Decode edges.
+                        // Compute edges from face information.
                         for i in 0..12 {
-
-                            // edges[i] = edges_initial[i];
-                            // edges[i] = Self::extract_bits(&value, 47 + i * 4, 4);
                             let mut s: String = String::from("");
                             let mut face = i * 6;
-                            let mut first = state_faces[edge_indices[face]][edge_indices[face+1]][edge_indices[face+2]];
+                            let mut first = state_faces[edge_face_table[face]][edge_face_table[face+1]][edge_face_table[face+2]];
                             face += 3;
-                            let mut second = state_faces[edge_indices[face]][edge_indices[face+1]][edge_indices[face+2]];
+                            let mut second = state_faces[edge_face_table[face]][edge_face_table[face+1]][edge_face_table[face+2]];
                             let mut parity: u32 = 0;
                             if first == 'U' || first == 'D' {
 
@@ -375,7 +336,7 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                                 parity = 1;
                             }
                             else if first == 'F' || first == 'B' {
-                                
+
                             }
                             else if second == 'F' || second == 'B' {
                                 assert!(first == 'L' || first == 'R', "Invalid edge");
@@ -431,15 +392,14 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                             edge_pieces.try_into().unwrap(),
                         );
 
-                        // println!("stste set: {:?}", cube.clone());
                         *state_copy.lock().unwrap() = cube;
                         *state_set_copy.lock().unwrap() = true;
                     }
                     Self::BATTERY_STATE_MESSAGE => {
-                        // println!("rx: BATTERY_STATE_MESSAGE");
-                        // println!("decrypted: {:?}", value);
                         *battery_percentage_copy.lock().unwrap() =
                             Some(Self::extract_bits(&value, 8, 8));
+                        *battery_charging_copy.lock().unwrap() =
+                            Some(Self::extract_bits(&value, 16, 8) != 0);
                     }
                     _ => (),
                 }
