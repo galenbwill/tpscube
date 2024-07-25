@@ -67,6 +67,7 @@ struct WCUSmartTimer<P: Peripheral + 'static> {
 }
 
 const DEBUG_CORNERS: bool = false;
+const DEBUG_EDGES: bool = false;
 
 impl<P: Peripheral> WCUCubeVersion1<P> {
     const LAST_MOVE_COUNT_OFFSET: usize = 12;
@@ -653,6 +654,9 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                                     corner_str.extend([foo]);
                                 }
                             }
+                            if i < 7 {
+                                total_corner_twist += corner_twist[i];
+                            }
                             // corner_twist[i] = 1;
                             corner_str = String::from(match corner_str.as_str() {
                                 "UFR" => "URF",
@@ -665,7 +669,6 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                                 "DBR" => "DRB",
                                 _ => &corner_str
                             });
-                            total_corner_twist += corner_twist[i];
                             if DEBUG_CORNERS {
                                 println!("corner[{}]: {} twist: {} ", i, &corner_str, corner_twist[i]);
                             }
@@ -682,14 +685,16 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                             let corner = Corner::from_str(&corner_str).expect("Invalid corner");
                             // vcorners.push(corner);
                             corners[i] = corner as u32;
+                            if !corners_left.remove(&corners[i]) || corner_twist[i] >= 3 {
+                                return;
+                            }
                         }
                         // println!("Corners: {:?}", vcorners.clone());
 
-                        // Decode edges. There are only 11 in the packet because the
-                        // last one is implicit (the one missing).
+                        // Decode edges.
                         for i in 0..12 {
 
-                            edges[i] = edges_initial[i];
+                            // edges[i] = edges_initial[i];
                             // edges[i] = Self::extract_bits(&value, 47 + i * 4, 4);
                             let mut s: String = String::from("");
                             let mut face = i * 6;
@@ -710,35 +715,35 @@ impl<P: Peripheral> WCUCubeVersion2<P> {
                                 
                             }
                             else if second == 'F' || second == 'B' {
-                                assert!(first == 'L' || first == 'R');
+                                assert!(first == 'L' || first == 'R', "Invalid edge");
                                 let t = second;
                                 second = first;
                                 first = t;
                                 parity = 1;
                             }
+                            else {
+                                return;
+                            }
                             s.extend([first, second]);
-                            // println!("edge[{}]: {}", i, s);
+                            if DEBUG_EDGES {
+                                println!("edge[{}]: {} parity: {}", i, s, parity);
+                            }
                             let edge = Edge3x3x3::from_str(&s).expect("Invalid edge");
                             edges[i] = edge as u32;
                             edge_parity[i] = parity;
-                            total_edge_parity += edge_parity[i];
+                            if i < 11 {
+                                total_edge_parity += edge_parity[i];
+                            }
                             if !edges_left.remove(&edges[i]) || edge_parity[i] >= 2 {
                                 return;
                             }
                         }
 
-                        // Add in the missing corner and edge based on the last one
-                        // left. There will always be exactly one left since we
-                        // already verified each corner and edge was unique.
-                        // corners[7] = *corners_left.iter().next().unwrap();
-                        // edges[11] = *edges_left.iter().next().unwrap();
-                        // println!("edges: {:?}", edges);
-
-                        // Compute the corner twist and edge parity of the last corner
-                        // and edge piece. The corner twist must be a multiple of 3 and
-                        // the edge parity must be even.
-                        // corner_twist[7] = (3 - total_corner_twist % 3) % 3;
-                        // edge_parity[11] = total_edge_parity & 1;
+                        if (corner_twist[7] != (3 - total_corner_twist % 3) % 3)
+                            || (edge_parity[11] != total_edge_parity & 1)
+                        {
+                            return;
+                        }
 
                         // Create cube state. Our representation of the cube state matches
                         // the one used in the packet. We have already verified the data
