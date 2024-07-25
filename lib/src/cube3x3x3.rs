@@ -4,6 +4,7 @@ use crate::{
     Move, OLLAlgorithm, PLLAlgorithm, RandomSource, RotationDirection, StandardRandomSource,
 };
 use num_enum::TryFromPrimitive;
+use strum_macros::EnumString;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -13,7 +14,7 @@ use crate::common::{CornerOrientationMoveTable, CornerPermutationMoveTable, Move
 use std::convert::TryInto;
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive, EnumString)]
 /// Identification of an edge piece. Names come from the faces of the cube this edge
 /// belongs to on a solved cube.
 pub enum Edge3x3x3 {
